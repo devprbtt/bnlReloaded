@@ -8,6 +8,9 @@ namespace BNLReloadedServer.Database;
 public interface IRegionServerDatabase
 {
     public bool UserConnected(uint userId);
+    public int GetOnlinePlayerCount();
+    public Dictionary<string, int> GetQueueCounts();
+    public List<StatusCustomGame> GetCustomGameStatuses();
     public void UserUiChanged(uint userId, UiId uiId, float duration);
     public UiId? GetUiId(uint userId);
     public bool UpdateScene(uint userId, Scene scene, IServiceScene sceneService, bool enterInstance);

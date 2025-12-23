@@ -75,6 +75,11 @@ public class Matchmaker(TcpServer server)
     
     private readonly ConcurrentDictionary<Key, QueueData> _queues = new();
 
+    public int GetQueueCount(Key gameModeKey)
+    {
+        return _queues.TryGetValue(gameModeKey, out var queue) ? queue.Players.Count : 0;
+    }
+
     private void StartQueue(Key gameModeKey)
     {
         var sender = new SessionSender(server);

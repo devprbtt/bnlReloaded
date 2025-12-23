@@ -55,4 +55,12 @@ public class DummyConfigDatabase : IConfigDatabase
     
     public bool DebugMode() => true;
     public bool DoReadline() => false;
+
+    public bool EnableStatusHttp() => true;
+
+    public int StatusHttpPort() => 28103;
+
+    public string StatusHttpHost() => "localhost";
+
+    public string StatusHttpPrefix() => $"http://{StatusHttpHost()}:{StatusHttpPort()}/";
 }

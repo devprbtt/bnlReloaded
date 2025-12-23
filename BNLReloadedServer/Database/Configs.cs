@@ -20,4 +20,7 @@ public class Configs
     public string? FromJsonName { get; init; }
     public bool DebugMode { get; init; }
     public bool DoReadline { get; init; }
+    public bool EnableStatusHttp { get; init; } = true;
+    public int StatusHttpPort { get; init; } = 28103;
+    public string StatusHttpHost { get; init; } = "localhost";
 }
