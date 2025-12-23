@@ -17,5 +17,5 @@
   "do_readline": true,
   "enable_status_http": true,
   "status_http_port": 28103,
-  "status_http_host": "localhost"
+  "status_http_host": "*"
 }

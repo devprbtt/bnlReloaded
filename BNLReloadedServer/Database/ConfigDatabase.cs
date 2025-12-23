@@ -22,7 +22,7 @@ public class ConfigDatabase : IConfigDatabase
         _masterIp = IPAddress.Parse(_configs.MasterHost);
         _regionIp = IPAddress.Parse(_configs.RegionHost);
         _regionPublicIp = IPAddress.Parse(_configs.RegionPublicHost);
-        _statusHttpHost = string.IsNullOrWhiteSpace(_configs.StatusHttpHost) ? "localhost" : _configs.StatusHttpHost;
+        _statusHttpHost = string.IsNullOrWhiteSpace(_configs.StatusHttpHost) ? "*" : _configs.StatusHttpHost;
         _statusHttpPort = _configs.StatusHttpPort is > 0 and < 65536 ? _configs.StatusHttpPort : 28103;
         _enableStatusHttp = _configs.EnableStatusHttp;
     }
