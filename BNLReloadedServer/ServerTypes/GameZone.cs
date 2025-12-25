@@ -2156,6 +2156,7 @@ public partial class GameZone : Updater
     }
 
     public (Dictionary<uint, MatchPlayerStats> stats, DateTimeOffset? attackStartTime, float? finalDurationSeconds)
+        GetStatusSnapshot()
     {
         var stats = _zoneData.PlayerStats.ToDictionary(
             player => player.Key,
