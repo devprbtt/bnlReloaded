@@ -27,4 +27,8 @@ public interface IConfigDatabase
     public int StatusHttpPort();
     public string StatusHttpHost();
     public string StatusHttpPrefix();
+    public bool EnableMasterStatusHttp();
+    public int MasterStatusHttpPort();
+    public string MasterStatusHttpHost();
+    public string MasterStatusHttpPrefix();
 }

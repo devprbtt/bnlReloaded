@@ -32,7 +32,9 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessageStatusRequest = 22,
+        MessageStatusResponse = 23
     }
 
     private ushort _currRpcId = 1;
@@ -260,6 +262,35 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         
         _playerDatabase.SetRatings(ratings);
     }
+
+    public void ReceiveStatusRequest(BinaryReader reader)
+    {
+        var rpcId = reader.ReadUInt16();
+        var status = new RegionStatus
+        {
+            RegionId = Databases.ConfigDatabase.GetRegionInfo().Name?.Text ?? string.Empty,
+            RegionName = Databases.ConfigDatabase.GetRegionInfo().Name?.Text,
+            Host = Databases.ConfigDatabase.RegionPublicHost(),
+            Port = 28101
+        };
+
+        if (Databases.RegionServerDatabase is { } regionDatabase)
+        {
+            status.OnlinePlayers = regionDatabase.GetOnlinePlayerCount();
+            status.Queues = regionDatabase.GetQueueCounts();
+            status.CustomGames = regionDatabase.GetCustomGameStatuses();
+        }
+        else
+        {
+            status.Error = "region database unavailable";
+        }
+
+        using var writer = CreateWriter();
+        writer.Write((byte)ServiceRegionId.MessageStatusResponse);
+        writer.Write(rpcId);
+        RegionStatus.WriteRecord(writer, status);
+        sender.Send(writer);
+    }
     
     public void SendLookingForFriends(uint playerId, bool lookingForFriends)
     {
@@ -412,6 +443,11 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
                 break;
             case ServiceRegionId.MessageFriend:
                 ReceiveFriendUpdate(reader);
+                break;
+            case ServiceRegionId.MessageStatusRequest:
+                ReceiveStatusRequest(reader);
+                break;
+            case ServiceRegionId.MessageStatusResponse:
                 break;
             case ServiceRegionId.MessageGetLeaderboard:
                 ReceiveLeaderboard(reader);
