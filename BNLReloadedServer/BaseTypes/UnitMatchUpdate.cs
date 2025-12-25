@@ -36,25 +36,27 @@ public partial class Unit
             case ScoreType.Assists:
                 _updater.UpdateMatchStats(this, assists: (int)MathF.Round(amount));
                 break;
-            case ScoreType.BlocksBuilt:
             case ScoreType.BlocksBuiltResource:
-            case ScoreType.HeroBlocksBuilt:
             case ScoreType.HeroBlocksBuiltResource:
-            case ScoreType.WorldBuilt:
             case ScoreType.WorldBuiltResource:
-            case ScoreType.DevicesBuilt:
             case ScoreType.DevicesBuiltResource:
-                _updater.UpdateMatchStats(this, blocksBuilt: (int)MathF.Round(amount));
+                _updater.UpdateMatchStats(this, blocksBuilt: (int)MathF.Floor(amount));
+                break;
+            case ScoreType.BlocksBuilt:
+            case ScoreType.HeroBlocksBuilt:
+            case ScoreType.WorldBuilt:
+            case ScoreType.DevicesBuilt:
+                break;
+            case ScoreType.BlocksDestroyedResource:
+            case ScoreType.HeroBlocksDestroyedResource:
+            case ScoreType.WorldDestroyedResource:
+            case ScoreType.DevicesDestroyedResource:
+                _updater.UpdateMatchStats(this, blocksDestroyed: (int)MathF.Floor(amount));
                 break;
             case ScoreType.BlocksDestroyed:
-            case ScoreType.BlocksDestroyedResource:
             case ScoreType.HeroBlocksDestroyed:
-            case ScoreType.HeroBlocksDestroyedResource:
             case ScoreType.WorldDestroyed:
-            case ScoreType.WorldDestroyedResource:
             case ScoreType.DevicesDestroyed:
-            case ScoreType.DevicesDestroyedResource:
-                _updater.UpdateMatchStats(this, blocksDestroyed: (int)MathF.Round(amount));
                 break;
             case ScoreType.ResourceEarnedTotal:
                 _updater.UpdateMatchStats(this, resourcesEarned: amount);
