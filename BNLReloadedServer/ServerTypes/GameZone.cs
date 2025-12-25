@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Timers;
+using System.Linq;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
@@ -2140,5 +2141,20 @@ public partial class GameZone : Updater
                 _supplyTimer = null;
             }
         }
+    }
+
+    public (Dictionary<uint, MatchPlayerStats> stats, DateTimeOffset? attackStartTime) GetStatusSnapshot()
+    {
+        var stats = _zoneData.PlayerStats.ToDictionary(
+            player => player.Key,
+            player => new MatchPlayerStats
+            {
+                Team = player.Value.Team,
+                Kills = player.Value.Kills,
+                Deaths = player.Value.Deaths,
+                Assists = player.Value.Assists
+            });
+
+        return (stats, _attackStartTime);
     }
 }

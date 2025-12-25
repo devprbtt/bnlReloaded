@@ -65,6 +65,38 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
         { "ranked", _matchmaker.GetQueueCount(CatalogueHelper.ModeRanked.Key) }
     };
 
+    public Dictionary<string, List<StatusQueuePlayer>> GetQueuePlayers()
+    {
+        var queueMap = new Dictionary<string, List<StatusQueuePlayer>>();
+        var queues = _matchmaker.GetQueues();
+
+        foreach (var (gameMode, players) in queues)
+        {
+            var queueName = gameMode == CatalogueHelper.ModeFriendly.Key
+                ? "casual"
+                : gameMode == CatalogueHelper.ModeRanked.Key
+                    ? "ranked"
+                    : null;
+
+            if (queueName == null)
+            {
+                continue;
+            }
+
+            queueMap[queueName] = players
+                .Select(player => new StatusQueuePlayer
+                {
+                    Id = player.PlayerId,
+                    Name = _playerDatabase.GetPlayerName(player.PlayerId),
+                    SquadId = player.SquadId,
+                    JoinedAt = player.JoinTime.ToUnixTimeMilliseconds()
+                })
+                .ToList();
+        }
+
+        return queueMap;
+    }
+
     public List<StatusCustomGame> GetCustomGameStatuses() =>
         _customGamePlayerLists.Values.Select(entry => new StatusCustomGame
         {
@@ -89,6 +121,12 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
                 Team = p.Team
             }).ToList()
         }).ToList();
+
+    public List<StatusGameStatus> GetActiveGameStatuses() => _gameInstances.Values
+        .Select(instance => instance.GetStatusSnapshot(_playerDatabase))
+        .Where(status => status != null)
+        .Select(status => status!)
+        .ToList();
 
     private bool GetService<TService>(Guid guid, ServiceId id, [MaybeNullWhen(false)] out TService serviceCaller) where TService: IService
     {

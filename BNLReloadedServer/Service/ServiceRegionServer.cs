@@ -278,7 +278,9 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         {
             status.OnlinePlayers = regionDatabase.GetOnlinePlayerCount();
             status.Queues = regionDatabase.GetQueueCounts();
+            status.QueuePlayers = regionDatabase.GetQueuePlayers();
             status.CustomGames = regionDatabase.GetCustomGameStatuses();
+            status.ActiveGames = regionDatabase.GetActiveGameStatuses();
         }
         else
         {
