@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using BNLReloadedServer.Database;
+using BNLReloadedServer.ProtocolInterfaces;
 
 namespace BNLReloadedServer.BaseTypes;
 
@@ -86,6 +87,21 @@ public partial class Unit
                 UpdateStat(ScoreType.HeroBlocksBuiltResource, resources);
                 break;
         }
+    }
+
+    public static float ResolveDeviceResourceValue(IInternalDevice? deviceCard, float? enemyReward, float? playerReward)
+    {
+        if (deviceCard?.BaseCost is { } baseCost)
+        {
+            return baseCost;
+        }
+
+        if (enemyReward is { } enemyValue)
+        {
+            return enemyValue;
+        }
+
+        return playerReward ?? 0;
     }
 
     public void DestroyedBlock(DeviceType deviceType, float resources)

@@ -1742,6 +1742,8 @@ public partial class GameZone
             }
             if (reward.EnemyReward is not null && killerPlayer.Team != targetTeam)
             {
+                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward.Value,
+                    reward.PlayerReward?.Value);
                 killerPlayer.AddResource(reward.EnemyReward.Value,
                     target.PlayerId != null ? ResourceType.Kill :
                     isObjective ? ResourceType.Objective :
@@ -1749,19 +1751,21 @@ public partial class GameZone
 
                 if (targetUnitCard.Health.Health?.HealthType is HealthType.World)
                 {
-                    killerPlayer.DestroyedBlock(targetUnitCard.DeviceType, reward.EnemyReward.Value);
+                    killerPlayer.DestroyedBlock(targetUnitCard.DeviceType, destroyValue);
                 }
             }
             else if (reward.PlayerReward is not null)
             {
+                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward?.Value,
+                    reward.PlayerReward.Value);
                 killerPlayer.AddResource(reward.PlayerReward.Value,
                     target.PlayerId != null ? ResourceType.Kill :
                     isObjective ? ResourceType.Objective :
                     mining ? ResourceType.Mining : ResourceType.General);
-                
+
                 if (targetUnitCard.Health.Health?.HealthType is HealthType.World)
                 {
-                    killerPlayer.DestroyedBlock(targetUnitCard.DeviceType, reward.PlayerReward.Value);
+                    killerPlayer.DestroyedBlock(targetUnitCard.DeviceType, destroyValue);
                 }
             }
         }
