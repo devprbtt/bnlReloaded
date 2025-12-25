@@ -48,12 +48,12 @@ public partial class Unit
             case ScoreType.WorldBuilt:
             case ScoreType.DevicesBuilt:
                 break;
-            case ScoreType.BlocksDestroyedResource:
-            case ScoreType.HeroBlocksDestroyedResource:
-            case ScoreType.WorldDestroyedResource:
             case ScoreType.DevicesDestroyedResource:
                 _updater.UpdateMatchStats(this, blocksDestroyed: (int)MathF.Floor(amount));
                 break;
+            case ScoreType.BlocksDestroyedResource:
+            case ScoreType.HeroBlocksDestroyedResource:
+            case ScoreType.WorldDestroyedResource:
             case ScoreType.BlocksDestroyed:
             case ScoreType.HeroBlocksDestroyed:
             case ScoreType.WorldDestroyed:
