@@ -1742,8 +1742,8 @@ public partial class GameZone
             }
             if (reward.EnemyReward is not null && killerPlayer.Team != targetTeam)
             {
-                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward.Value,
-                    reward.PlayerReward?.Value);
+                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward,
+                    reward.PlayerReward);
                 killerPlayer.AddResource(reward.EnemyReward.Value,
                     target.PlayerId != null ? ResourceType.Kill :
                     isObjective ? ResourceType.Objective :
@@ -1756,8 +1756,8 @@ public partial class GameZone
             }
             else if (reward.PlayerReward is not null)
             {
-                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward?.Value,
-                    reward.PlayerReward.Value);
+                var destroyValue = Unit.ResolveDeviceResourceValue(targetUnitCard, reward.EnemyReward,
+                    reward.PlayerReward);
                 killerPlayer.AddResource(reward.PlayerReward.Value,
                     target.PlayerId != null ? ResourceType.Kill :
                     isObjective ? ResourceType.Objective :
