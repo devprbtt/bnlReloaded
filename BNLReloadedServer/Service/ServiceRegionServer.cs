@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
@@ -274,15 +275,24 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
             Port = 28101
         };
 
-        if (Databases.RegionServerDatabase is { } regionDatabase)
+        try
         {
-            status.OnlinePlayers = regionDatabase.GetOnlinePlayerCount();
-            status.Queues = regionDatabase.GetQueueCounts();
-            status.CustomGames = regionDatabase.GetCustomGameStatuses();
+            if (Databases.RegionServerDatabase is { } regionDatabase)
+            {
+                status.OnlinePlayers = regionDatabase.GetOnlinePlayerCount();
+                status.Queues = regionDatabase.GetQueueCounts();
+                status.QueuePlayers = regionDatabase.GetQueuePlayers();
+                status.CustomGames = regionDatabase.GetCustomGameStatuses();
+                status.ActiveGames = regionDatabase.GetActiveGameStatuses();
+            }
+            else
+            {
+                status.Error = "region database unavailable";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            status.Error = "region database unavailable";
+            status.Error = $"status generation failed: {ex.Message}";
         }
 
         using var writer = CreateWriter();

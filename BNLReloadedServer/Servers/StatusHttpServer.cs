@@ -102,7 +102,9 @@ public sealed class StatusHttpServer : IDisposable
             {
                 onlinePlayers = _regionDatabase.GetOnlinePlayerCount(),
                 queues = _regionDatabase.GetQueueCounts(),
-                customGames = _regionDatabase.GetCustomGameStatuses()
+                queuePlayers = _regionDatabase.GetQueuePlayers(),
+                customGames = _regionDatabase.GetCustomGameStatuses(),
+                activeGames = _regionDatabase.GetActiveGameStatuses()
             };
             var payload = JsonSerializer.Serialize(response);
             var buffer = Encoding.UTF8.GetBytes(payload);

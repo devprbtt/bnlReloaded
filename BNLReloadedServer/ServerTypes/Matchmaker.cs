@@ -80,6 +80,11 @@ public class Matchmaker(TcpServer server)
         return _queues.TryGetValue(gameModeKey, out var queue) ? queue.Players.Count : 0;
     }
 
+    public Dictionary<Key, List<PlayerQueueData>> GetQueues()
+    {
+        return _queues.ToDictionary(queue => queue.Key, queue => queue.Value.Players.ToList());
+    }
+
     private void StartQueue(Key gameModeKey)
     {
         var sender = new SessionSender(server);

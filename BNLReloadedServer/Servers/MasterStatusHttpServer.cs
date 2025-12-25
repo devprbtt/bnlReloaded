@@ -131,7 +131,9 @@ public sealed class MasterStatusHttpServer : IDisposable
             {
                 status.OnlinePlayers = remoteStatus.OnlinePlayers;
                 status.Queues = remoteStatus.Queues;
+                status.QueuePlayers = remoteStatus.QueuePlayers;
                 status.CustomGames = remoteStatus.CustomGames;
+                status.ActiveGames = remoteStatus.ActiveGames;
             }
         }
         catch (OperationCanceledException)
