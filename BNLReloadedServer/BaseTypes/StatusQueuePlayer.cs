@@ -17,7 +17,7 @@ public class StatusQueuePlayer
         new BitField(true, value.Name != null, value.SquadId.HasValue, true).Write(writer);
         writer.Write(value.Id);
         writer.WriteOption(value.Name, writer.Write);
-        writer.WriteOption(value.SquadId, writer.Write);
+        writer.WriteOptionValue(value.SquadId, writer.Write);
         writer.Write(value.JoinedAt);
     }
 
@@ -53,8 +53,8 @@ public class StatusGameStatus
         new BitField(true, true, value.StartedAt.HasValue, value.MatchDurationSeconds.HasValue, true).Write(writer);
         writer.Write(value.Id);
         writer.Write(value.Mode);
-        writer.WriteOption(value.StartedAt, writer.Write);
-        writer.WriteOption(value.MatchDurationSeconds, writer.Write);
+        writer.WriteOptionValue(value.StartedAt, writer.Write);
+        writer.WriteOptionValue(value.MatchDurationSeconds, writer.Write);
         writer.WriteList(value.Players, StatusGamePlayer.WriteRecord);
     }
 

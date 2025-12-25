@@ -443,7 +443,12 @@ public class GameInstance : IGameInstance
 
         foreach (var (playerId, info) in _connectedUsers)
         {
-            stats?.TryGetValue(playerId, out var playerStats);
+            MatchPlayerStats? playerStats = null;
+
+            if (stats != null)
+            {
+                stats.TryGetValue(playerId, out playerStats);
+            }
             status.Players.Add(new StatusGamePlayer
             {
                 Id = playerId,
