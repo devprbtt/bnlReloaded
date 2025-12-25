@@ -412,7 +412,9 @@ public class GameInstance : IGameInstance
             ? "casual"
             : modeKey == CatalogueHelper.ModeRanked.Key
                 ? "ranked"
-                : null;
+                : modeKey == CatalogueHelper.ModeCustom.Key
+                    ? "custom"
+                    : null;
 
         if (mode == null)
         {
