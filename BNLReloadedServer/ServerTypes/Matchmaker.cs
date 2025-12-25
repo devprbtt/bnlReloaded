@@ -38,12 +38,15 @@ public class Matchmaker(TcpServer server)
         public Key GameModeKey { get; init; }
         public List<PlayerQueueData> Players { get; set; } = [];
         public ConcurrentDictionary<uint, bool> DoBackfilling { get; } = new();
+        public Dictionary<uint, IServiceChat> ChatServices { get; } = new();
         public required SessionSender Sender { get; init; }
         public required SessionSender MatchSender1 { get; init; }
         public required SessionSender MatchSender2 { get; init; }
         public required IServiceMatchmaker ServiceMatchmaker { get; init; }
         public required IServiceMatchmaker PopServiceMatchmaker1 { get; init; }
         public required IServiceMatchmaker PopServiceMatchmaker2 { get; init; }
+        public required RoomIdQueue RoomId { get; init; }
+        public required ChatRoom ChatRoom { get; init; }
         public ConcurrentDictionary<uint, bool> AcceptVotes1 { get; } = new();
         public ConcurrentDictionary<uint, bool> AcceptVotes2 { get; } = new();
         public List<PlayerQueueData>? Team1 { get; set; }
@@ -85,11 +88,22 @@ public class Matchmaker(TcpServer server)
         return _queues.ToDictionary(queue => queue.Key, queue => queue.Value.Players.ToList());
     }
 
+    public ChatRoom? GetQueueChatRoom(RoomIdQueue roomId)
+    {
+        return _queues.TryGetValue(roomId.GameModeKey, out var queue) && queue.RoomId.Equals(roomId)
+            ? queue.ChatRoom
+            : null;
+    }
+
     private void StartQueue(Key gameModeKey)
     {
         var sender = new SessionSender(server);
         var matchSender = new SessionSender(server);
         var matchSender2 = new SessionSender(server);
+        var roomId = new RoomIdQueue
+        {
+            GameModeKey = gameModeKey
+        };
         var queue = new QueueData
         {
             GameModeKey = gameModeKey,
@@ -99,7 +113,9 @@ public class Matchmaker(TcpServer server)
             ServiceMatchmaker = new ServiceMatchmaker(sender),
             PopServiceMatchmaker1 = new ServiceMatchmaker(matchSender),
             PopServiceMatchmaker2 = new ServiceMatchmaker(matchSender2),
-            LastJoinTime = DateTimeOffset.Now
+            LastJoinTime = DateTimeOffset.Now,
+            RoomId = roomId,
+            ChatRoom = new ChatRoom(roomId, new SessionSender(server))
         };
         _queues[gameModeKey] = queue;
         queue.QueueLoop = RunQueueCheck(queue);
@@ -123,22 +139,26 @@ public class Matchmaker(TcpServer server)
         queue?.MatchSender1.UnsubscribeAll();
         queue?.MatchSender2.UnsubscribeAll();
         queue?.Sender.UnsubscribeAll();
+        queue?.ChatRoom.ClearRoom();
+        queue?.ChatServices.Clear();
         queue?.IsPop = PopStatus.None;
         queue?.Players.Clear();
     }
 
-    public void AddPlayer(Key gameModeKey, uint playerId, Guid guid, Rating rating, ulong? squadId, IServiceMatchmaker matchmakerService)
+    public void AddPlayer(Key gameModeKey, uint playerId, Guid guid, Rating rating, ulong? squadId, IServiceMatchmaker matchmakerService, IServiceChat chatService)
     {
         if (!_queues.ContainsKey(gameModeKey))
         {
             StartQueue(gameModeKey);
         }
-        
+
         if (!_queues.TryGetValue(gameModeKey, out var queue)) return;
+        RemovePlayerFromChat(queue, playerId);
         queue.Players.RemoveAll(p => p.PlayerId == playerId);
         queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
         queue.LastJoinTime = DateTimeOffset.Now;
         queue.Sender.Subscribe(guid);
+        AddPlayerToChat(queue, guid, playerId, chatService);
         matchmakerService.SendMatchmakerUpdate(new MatchmakerUpdate
         {
             State = new MatchmakerState
@@ -164,6 +184,7 @@ public class Matchmaker(TcpServer server)
             queue.Sender.Unsubscribe(player.PlayerGuid);
             queue.MatchSender1.Unsubscribe(player.PlayerGuid);
             queue.MatchSender2.Unsubscribe(player.PlayerGuid);
+            RemovePlayerFromChat(queue, playerId);
             queue.Players.Remove(player);
             queue.DoBackfilling.TryRemove(playerId, out _);
             queue.ServiceMatchmaker.SendQueueLeft(playerId);
@@ -199,6 +220,7 @@ public class Matchmaker(TcpServer server)
                 queue.Sender.Unsubscribe(p.PlayerGuid);
                 queue.MatchSender1.Unsubscribe(p.PlayerGuid);
                 queue.MatchSender2.Unsubscribe(p.PlayerGuid);
+                RemovePlayerFromChat(queue, p.PlayerId);
                 queue.Players.Remove(p);
                 queue.DoBackfilling.TryRemove(p.PlayerId, out _);
                 queue.ServiceMatchmaker.SendQueueLeft(p.PlayerId);
@@ -230,6 +252,28 @@ public class Matchmaker(TcpServer server)
         {
             queue.DoBackfilling[playerId] = value;
         }
+    }
+
+    private static void AddPlayerToChat(QueueData queue, Guid playerGuid, uint playerId, IServiceChat chatService)
+    {
+        queue.ChatServices[playerId] = chatService;
+        queue.ChatRoom.AddToRoom(playerGuid, chatService);
+    }
+
+    private static void RemovePlayerFromChat(QueueData queue, uint playerId)
+    {
+        if (!queue.ChatServices.TryGetValue(playerId, out var chatService))
+        {
+            return;
+        }
+
+        var player = queue.Players.FirstOrDefault(p => p.PlayerId == playerId);
+        if (player != null)
+        {
+            queue.ChatRoom.RemoveFromRoom(player.PlayerGuid, chatService);
+        }
+
+        queue.ChatServices.Remove(playerId);
     }
 
     public void ForceStartGame(uint playerId)

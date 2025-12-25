@@ -31,6 +31,7 @@ public abstract class RoomId
             RoomIdType.Squad => new RoomIdSquad(),
             RoomIdType.CustomGame => new RoomIdCustomGame(),
             RoomIdType.Global => new RoomIdGlobal(),
+            RoomIdType.Queue => new RoomIdQueue(),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Invalid variant tag")
         };
     }

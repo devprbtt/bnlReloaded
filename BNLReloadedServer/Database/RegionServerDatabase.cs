@@ -726,12 +726,15 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
                     ? squad.ChatRoom
                     : null
                 : null,
-            RoomIdType.CustomGame => GetCustomGame(playerId, out var custom) 
+            RoomIdType.CustomGame => GetCustomGame(playerId, out var custom)
                 ? custom.ChatRoom.RoomId.Equals(roomId)
-                    ? custom.ChatRoom 
-                    : null 
+                    ? custom.ChatRoom
+                    : null
                 : null,
             RoomIdType.Global => _globalChatRoom,
+            RoomIdType.Queue => roomId is RoomIdQueue roomIdQueue
+                ? _matchmaker.GetQueueChatRoom(roomIdQueue)
+                : null,
             _ => null
         };
     }
@@ -815,15 +818,19 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             {
                 if (!UserConnected(pId, out var pInfo) || _playerDatabase.GetPlayerDataNoWait(pId) is not { } pData ||
                     _playerDatabase.IsBanned(pId) ||
-                    !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker))
+                    !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker) ||
+                    !GetService<IServiceChat>(pInfo.Guid, ServiceId.ServiceChat, out var chatService))
                     continue;
-                
-                _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker);
+
+                _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker, chatService);
             }
         }
         else
         {
-            _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker);
+            if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
+                return;
+
+            _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker, chatService);
         }
     }
 
