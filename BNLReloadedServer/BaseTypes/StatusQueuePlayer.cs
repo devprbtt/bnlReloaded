@@ -16,8 +16,16 @@ public class StatusQueuePlayer
     {
         new BitField(true, value.Name != null, value.SquadId.HasValue, true).Write(writer);
         writer.Write(value.Id);
-        writer.WriteOption(value.Name, writer.Write);
-        writer.WriteOptionValue(value.SquadId, writer.Write);
+        if (value.Name != null)
+        {
+            writer.Write(value.Name);
+        }
+
+        if (value.SquadId.HasValue)
+        {
+            writer.Write(value.SquadId.Value);
+        }
+
         writer.Write(value.JoinedAt);
     }
 
@@ -53,8 +61,16 @@ public class StatusGameStatus
         new BitField(true, true, value.StartedAt.HasValue, value.MatchDurationSeconds.HasValue, true).Write(writer);
         writer.Write(value.Id);
         writer.Write(value.Mode);
-        writer.WriteOptionValue(value.StartedAt, writer.Write);
-        writer.WriteOptionValue(value.MatchDurationSeconds, writer.Write);
+        if (value.StartedAt.HasValue)
+        {
+            writer.Write(value.StartedAt.Value);
+        }
+
+        if (value.MatchDurationSeconds.HasValue)
+        {
+            writer.Write(value.MatchDurationSeconds.Value);
+        }
+
         writer.WriteList(value.Players, StatusGamePlayer.WriteRecord);
     }
 
@@ -94,7 +110,10 @@ public class StatusGamePlayer
     {
         new BitField(true, value.Name != null, true, true, true, true).Write(writer);
         writer.Write(value.Id);
-        writer.WriteOption(value.Name, writer.Write);
+        if (value.Name != null)
+        {
+            writer.Write(value.Name);
+        }
         writer.WriteByteEnum(value.Team);
         writer.Write(value.Kills);
         writer.Write(value.Deaths);
