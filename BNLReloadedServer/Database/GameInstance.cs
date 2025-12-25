@@ -423,12 +423,14 @@ public class GameInstance : IGameInstance
 
         Dictionary<uint, MatchPlayerStats>? stats = null;
         DateTimeOffset? attackStartTime = null;
+        float? finalDurationSeconds = null;
 
         if (Zone != null)
         {
             var zoneSnapshot = Zone.GetStatusSnapshot();
             stats = zoneSnapshot.stats;
             attackStartTime = zoneSnapshot.attackStartTime;
+            finalDurationSeconds = zoneSnapshot.finalDurationSeconds;
         }
 
         var status = new StatusGameStatus
@@ -436,9 +438,9 @@ public class GameInstance : IGameInstance
             Id = GameInstanceId,
             Mode = mode,
             StartedAt = attackStartTime?.ToUnixTimeMilliseconds(),
-            MatchDurationSeconds = attackStartTime.HasValue
+            MatchDurationSeconds = finalDurationSeconds ?? (attackStartTime.HasValue
                 ? (float)(DateTimeOffset.Now - attackStartTime.Value).TotalSeconds
-                : null
+                : null)
         };
 
         foreach (var (playerId, info) in _connectedUsers)
@@ -456,7 +458,10 @@ public class GameInstance : IGameInstance
                 Team = info.Team,
                 Kills = playerStats?.Kills ?? 0,
                 Deaths = playerStats?.Deaths ?? 0,
-                Assists = playerStats?.Assists ?? 0
+                Assists = playerStats?.Assists ?? 0,
+                BlocksBuilt = playerStats?.BlocksBuilt ?? 0,
+                BlocksDestroyed = playerStats?.BlocksDestroyed ?? 0,
+                ResourcesEarned = playerStats?.ResourcesEarned ?? 0
             });
         }
 

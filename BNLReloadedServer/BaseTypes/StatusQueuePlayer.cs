@@ -106,9 +106,15 @@ public class StatusGamePlayer
 
     public int Assists { get; set; }
 
+    public int BlocksBuilt { get; set; }
+
+    public int BlocksDestroyed { get; set; }
+
+    public float ResourcesEarned { get; set; }
+
     public static void WriteRecord(BinaryWriter writer, StatusGamePlayer value)
     {
-        new BitField(true, value.Name != null, true, true, true, true).Write(writer);
+        new BitField(true, value.Name != null, true, true, true, true, true, true, true).Write(writer);
         writer.Write(value.Id);
         if (value.Name != null)
         {
@@ -118,11 +124,14 @@ public class StatusGamePlayer
         writer.Write(value.Kills);
         writer.Write(value.Deaths);
         writer.Write(value.Assists);
+        writer.Write(value.BlocksBuilt);
+        writer.Write(value.BlocksDestroyed);
+        writer.Write(value.ResourcesEarned);
     }
 
     public static StatusGamePlayer ReadRecord(BinaryReader reader)
     {
-        var bitField = new BitField(6);
+        var bitField = new BitField(9);
         bitField.Read(reader);
 
         return new StatusGamePlayer
@@ -132,7 +141,10 @@ public class StatusGamePlayer
             Team = bitField[2] ? reader.ReadByteEnum<TeamType>() : TeamType.Neutral,
             Kills = bitField[3] ? reader.ReadInt32() : 0,
             Deaths = bitField[4] ? reader.ReadInt32() : 0,
-            Assists = bitField[5] ? reader.ReadInt32() : 0
+            Assists = bitField[5] ? reader.ReadInt32() : 0,
+            BlocksBuilt = bitField[6] ? reader.ReadInt32() : 0,
+            BlocksDestroyed = bitField[7] ? reader.ReadInt32() : 0,
+            ResourcesEarned = bitField[8] ? reader.ReadSingle() : 0
         };
     }
 }

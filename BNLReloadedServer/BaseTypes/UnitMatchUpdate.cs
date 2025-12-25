@@ -36,6 +36,17 @@ public partial class Unit
             case ScoreType.Assists:
                 _updater.UpdateMatchStats(this, assists: (int)MathF.Round(amount));
                 break;
+            case ScoreType.BlocksBuilt:
+            case ScoreType.BlocksBuiltResource:
+                _updater.UpdateMatchStats(this, blocksBuilt: (int)MathF.Round(amount));
+                break;
+            case ScoreType.BlocksDestroyed:
+            case ScoreType.BlocksDestroyedResource:
+                _updater.UpdateMatchStats(this, blocksDestroyed: (int)MathF.Round(amount));
+                break;
+            case ScoreType.ResourceEarnedTotal:
+                _updater.UpdateMatchStats(this, resourcesEarned: amount);
+                break;
         }
     }
     
@@ -69,15 +80,19 @@ public partial class Unit
         {
             case DeviceType.None:
             case DeviceType.World:
+                UpdateStat(ScoreType.WorldDestroyed, 1);
                 UpdateStat(ScoreType.WorldDestroyedResource, resources);
                 break;
             case DeviceType.Block:
+                UpdateStat(ScoreType.BlocksDestroyed, 1);
                 UpdateStat(ScoreType.BlocksDestroyedResource, resources);
                 break;
             case DeviceType.Device:
+                UpdateStat(ScoreType.DevicesDestroyed, 1);
                 UpdateStat(ScoreType.DevicesDestroyedResource, resources);
                 break;
             case DeviceType.Hero:
+                UpdateStat(ScoreType.HeroBlocksDestroyed, 1);
                 UpdateStat(ScoreType.HeroBlocksDestroyedResource, resources);
                 break;
         }
