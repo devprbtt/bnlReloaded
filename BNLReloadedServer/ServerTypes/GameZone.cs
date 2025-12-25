@@ -971,9 +971,15 @@ public partial class GameZone : Updater
 
             if (player.Stats != null)
             {
-                var statInfo = _zoneData.MatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
-                    v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
-                var totalInfo = _zoneData.MatchCard.Stats?.Total;
+            var statInfo = _zoneData.MatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
+                v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
+            var totalInfo = _zoneData.MatchCard.Stats?.Total;
+
+            if (player.PlayerId is { } kickedPlayerId && statInfo is not null &&
+                _zoneData.PlayerStats.TryGetValue(kickedPlayerId, out var aggregatedStats))
+            {
+                statInfo[PlayerMatchStatType.Destroyed] = aggregatedStats.BlocksDestroyed;
+            }
                 Databases.PlayerDatabase.UpdateMatchStats(new EndMatchResults
                 {
                     PlayerId = playerId,
@@ -1260,6 +1266,12 @@ public partial class GameZone : Updater
             var statInfo = zoneDataMatchCard.Stats?.Stats?.ToDictionary(k => k.Key,
                 v => (int)v.Value.Sum(score => player.Stats.GetValueOrDefault(score.Key) * score.Value));
             var totalInfo = zoneDataMatchCard.Stats?.Total;
+
+            if (player.PlayerId is { } playerId && statInfo is not null &&
+                _zoneData.PlayerStats.TryGetValue(playerId, out var aggregatedStats))
+            {
+                statInfo[PlayerMatchStatType.Destroyed] = aggregatedStats.BlocksDestroyed;
+            }
             
             var playerInfo = _playerLobbyInfo.FirstOrDefault(u => u.PlayerId == player.PlayerId);
             matchStats.Add(new EndMatchPlayerData
