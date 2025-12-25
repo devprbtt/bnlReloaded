@@ -822,7 +822,8 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
                     !GetService<IServiceChat>(pInfo.Guid, ServiceId.ServiceChat, out var chatService))
                     continue;
 
-                _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker, chatService);
+                _matchmaker.AddPlayerToQueueChat(gameModeKey, pId, pInfo.Guid, chatService);
+                _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker);
             }
         }
         else
@@ -830,7 +831,8 @@ public class RegionServerDatabase(TcpServer server, TcpServer matchServer) : IRe
             if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
                 return;
 
-            _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker, chatService);
+            _matchmaker.AddPlayerToQueueChat(gameModeKey, playerId, playerInfo.Guid, chatService);
+            _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker);
         }
     }
 

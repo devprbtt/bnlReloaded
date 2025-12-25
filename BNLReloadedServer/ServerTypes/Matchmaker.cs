@@ -38,7 +38,7 @@ public class Matchmaker(TcpServer server)
         public Key GameModeKey { get; init; }
         public List<PlayerQueueData> Players { get; set; } = [];
         public ConcurrentDictionary<uint, bool> DoBackfilling { get; } = new();
-        public Dictionary<uint, IServiceChat> ChatServices { get; } = new();
+        public ConcurrentDictionary<uint, IServiceChat> ChatServices { get; } = new();
         public required SessionSender Sender { get; init; }
         public required SessionSender MatchSender1 { get; init; }
         public required SessionSender MatchSender2 { get; init; }
@@ -145,7 +145,7 @@ public class Matchmaker(TcpServer server)
         queue?.Players.Clear();
     }
 
-    public void AddPlayer(Key gameModeKey, uint playerId, Guid guid, Rating rating, ulong? squadId, IServiceMatchmaker matchmakerService, IServiceChat chatService)
+    public void AddPlayer(Key gameModeKey, uint playerId, Guid guid, Rating rating, ulong? squadId, IServiceMatchmaker matchmakerService)
     {
         if (!_queues.ContainsKey(gameModeKey))
         {
@@ -153,12 +153,10 @@ public class Matchmaker(TcpServer server)
         }
 
         if (!_queues.TryGetValue(gameModeKey, out var queue)) return;
-        RemovePlayerFromChat(queue, playerId);
         queue.Players.RemoveAll(p => p.PlayerId == playerId);
         queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
         queue.LastJoinTime = DateTimeOffset.Now;
         queue.Sender.Subscribe(guid);
-        AddPlayerToChat(queue, guid, playerId, chatService);
         matchmakerService.SendMatchmakerUpdate(new MatchmakerUpdate
         {
             State = new MatchmakerState
@@ -174,6 +172,22 @@ public class Matchmaker(TcpServer server)
         });
         
         QueueCheck(queue);
+    }
+
+    public void AddPlayerToQueueChat(Key gameModeKey, uint playerId, Guid playerGuid, IServiceChat chatService)
+    {
+        if (!_queues.ContainsKey(gameModeKey))
+        {
+            StartQueue(gameModeKey);
+        }
+
+        if (!_queues.TryGetValue(gameModeKey, out var queue))
+        {
+            return;
+        }
+
+        RemovePlayerFromChat(queue, playerId);
+        AddPlayerToChat(queue, playerGuid, playerId, chatService);
     }
 
     public void RemovePlayer(uint playerId, IServiceMatchmaker? matchmakerService)
@@ -262,7 +276,7 @@ public class Matchmaker(TcpServer server)
 
     private static void RemovePlayerFromChat(QueueData queue, uint playerId)
     {
-        if (!queue.ChatServices.TryGetValue(playerId, out var chatService))
+        if (!queue.ChatServices.TryRemove(playerId, out var chatService))
         {
             return;
         }
@@ -272,8 +286,6 @@ public class Matchmaker(TcpServer server)
         {
             queue.ChatRoom.RemoveFromRoom(player.PlayerGuid, chatService);
         }
-
-        queue.ChatServices.Remove(playerId);
     }
 
     public void ForceStartGame(uint playerId)
