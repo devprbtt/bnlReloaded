@@ -102,6 +102,8 @@ public class StatusGamePlayer
 
     public Key Hero { get; set; }
 
+    public string? HeroId { get; set; }
+
     public int Kills { get; set; }
 
     public int Deaths { get; set; }
@@ -116,7 +118,8 @@ public class StatusGamePlayer
 
     public static void WriteRecord(BinaryWriter writer, StatusGamePlayer value)
     {
-        new BitField(true, value.Name != null, true, value.Hero != Key.None, true, true, true, true, true, true).Write(writer);
+        new BitField(true, value.Name != null, true, value.Hero != Key.None, value.HeroId != null, true, true, true, true, true, true)
+            .Write(writer);
         writer.Write(value.Id);
         if (value.Name != null)
         {
@@ -126,6 +129,10 @@ public class StatusGamePlayer
         if (value.Hero != Key.None)
         {
             Key.WriteRecord(writer, value.Hero);
+        }
+        if (value.HeroId != null)
+        {
+            writer.Write(value.HeroId);
         }
         writer.Write(value.Kills);
         writer.Write(value.Deaths);
@@ -137,7 +144,7 @@ public class StatusGamePlayer
 
     public static StatusGamePlayer ReadRecord(BinaryReader reader)
     {
-        var bitField = new BitField(10);
+        var bitField = new BitField(11);
         bitField.Read(reader);
 
         return new StatusGamePlayer
@@ -146,12 +153,13 @@ public class StatusGamePlayer
             Name = bitField[1] ? reader.ReadString() : null,
             Team = bitField[2] ? reader.ReadByteEnum<TeamType>() : TeamType.Neutral,
             Hero = bitField[3] ? Key.ReadRecord(reader) : Key.None,
-            Kills = bitField[4] ? reader.ReadInt32() : 0,
-            Deaths = bitField[5] ? reader.ReadInt32() : 0,
-            Assists = bitField[6] ? reader.ReadInt32() : 0,
-            BlocksBuilt = bitField[7] ? reader.ReadInt32() : 0,
-            BlocksDestroyed = bitField[8] ? reader.ReadInt32() : 0,
-            ResourcesEarned = bitField[9] ? reader.ReadSingle() : 0
+            HeroId = bitField[4] ? reader.ReadString() : null,
+            Kills = bitField[5] ? reader.ReadInt32() : 0,
+            Deaths = bitField[6] ? reader.ReadInt32() : 0,
+            Assists = bitField[7] ? reader.ReadInt32() : 0,
+            BlocksBuilt = bitField[8] ? reader.ReadInt32() : 0,
+            BlocksDestroyed = bitField[9] ? reader.ReadInt32() : 0,
+            ResourcesEarned = bitField[10] ? reader.ReadSingle() : 0
         };
     }
 }

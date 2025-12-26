@@ -451,12 +451,15 @@ public class GameInstance : IGameInstance
             {
                 stats.TryGetValue(playerId, out playerStats);
             }
+            var heroKey = GetPlayerHero(playerId);
+            var heroId = heroKey != Key.None ? Databases.Catalogue.GetCard<CardUnit>(heroKey)?.Id : null;
             status.Players.Add(new StatusGamePlayer
             {
                 Id = playerId,
                 Name = playerDatabase.GetPlayerName(playerId),
                 Team = info.Team,
-                Hero = GetPlayerHero(playerId),
+                Hero = heroKey,
+                HeroId = heroId,
                 Kills = playerStats?.Kills ?? 0,
                 Deaths = playerStats?.Deaths ?? 0,
                 Assists = playerStats?.Assists ?? 0,
