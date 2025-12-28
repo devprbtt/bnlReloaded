@@ -139,6 +139,7 @@ public class Matchmaker(AsyncTaskTcpServer server)
         queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
         queue.LastJoinTime = DateTimeOffset.Now;
         queue.Sender.Subscribe(guid);
+        Databases.RegionServerDatabase.AddToQueueChat(playerId);
         matchmakerService.SendMatchmakerUpdate(new MatchmakerUpdate
         {
             State = new MatchmakerState

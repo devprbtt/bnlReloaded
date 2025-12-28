@@ -847,13 +847,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     continue;
 
                 _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker);
-                AddToQueueChat(pId);
             }
         }
         else
         {
             _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker);
-            AddToQueueChat(playerId);
         }
     }
 
@@ -870,14 +868,12 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     continue;
 
                 matchServices.Add(matchmaker);
-                RemoveFromQueueChat(pId);
             }
             _matchmaker.RemoveSquad(playerInfo.SquadId.Value, matchServices);
         }
         else
         {
             _matchmaker.RemovePlayer(playerId, serviceMatchmaker);
-            RemoveFromQueueChat(playerId);
         }
     }
 
@@ -953,7 +949,6 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     {
         if(!_squads.TryGetValue(squadId, out var squad)) return;
         var matchmakersServices = new List<IServiceMatchmaker>();
-        var removedPlayers = new List<uint>();
         foreach (var playerId in squad.GetPlayers())
         {
             if (!UserConnected(playerId, out var playerInfo)) continue;
@@ -961,15 +956,9 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
             {
                 matchmakersServices.Add(serviceMatchmaker);
             }
-            removedPlayers.Add(playerId);
         }
 
         _matchmaker.RemoveSquad(squadId, matchmakersServices);
-
-        foreach (var playerId in removedPlayers)
-        {
-            RemoveFromQueueChat(playerId);
-        }
     }
 
     public bool JoinSquad(uint playerId, ulong squadId)
