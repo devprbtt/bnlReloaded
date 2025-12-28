@@ -46,6 +46,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     private readonly ConcurrentDictionary<string, MatchmakerInitiator> _matchmakerGames = new();
 
     private readonly ChatRoom _globalChatRoom = new(new RoomIdGlobal(), new SessionSender(server));
+    private readonly ChatPlayer _queueChatAnnouncer = new() { PlayerId = 0, Nickname = "Matchmaking" };
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
 
@@ -242,6 +243,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         Console.WriteLine($"[QueueChat] Added {playerInfo.ChatInfo.Nickname} ({playerId}) to matchmaking chat.");
 
         _globalChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} joined the matchmaking queue.");
+        _globalChatRoom.SendMessage(_queueChatAnnouncer, "Matchmaking chat is active while you wait.");
     }
 
     public void RemoveFromQueueChat(uint playerId)
