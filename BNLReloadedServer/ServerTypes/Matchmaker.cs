@@ -167,6 +167,8 @@ public class Matchmaker(AsyncTaskTcpServer server)
             queue.Players.Remove(player);
             queue.DoBackfilling.TryRemove(playerId, out _);
             queue.ServiceMatchmaker.SendQueueLeft(playerId);
+
+            Databases.RegionServerDatabase.RemoveFromQueueChat(playerId);
             
             matchmakerService?.SendMatchmakerUpdate(new MatchmakerUpdate
             {
@@ -202,6 +204,8 @@ public class Matchmaker(AsyncTaskTcpServer server)
                 queue.Players.Remove(p);
                 queue.DoBackfilling.TryRemove(p.PlayerId, out _);
                 queue.ServiceMatchmaker.SendQueueLeft(p.PlayerId);
+
+                Databases.RegionServerDatabase.RemoveFromQueueChat(p.PlayerId);
             });
             
             serviceMatchmakers.ForEach(m => m.SendMatchmakerUpdate(new MatchmakerUpdate

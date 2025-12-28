@@ -26,6 +26,8 @@ public interface IRegionServerDatabase
     public bool LinkMatchSessionGuidToUser(uint userId, Guid sessionId);
     public bool AddUser(uint userId, Guid sessionId);
     public bool RemoveUser(uint userId);
+    public void AddToQueueChat(uint playerId);
+    public void RemoveFromQueueChat(uint playerId);
     public bool UpdateChatName(uint userId, string newName);
     public Task NotifyFriends(uint playerId);
     public Task NotifyRequests(uint receiverId, uint senderId);

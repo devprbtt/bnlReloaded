@@ -30,6 +30,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         public Key? GameModeForSquadInvite { get; set; }
         public bool Online { get; set; } = true;
         public bool IsAdmin { get; } = isAdmin;
+        public bool InQueueChat { get; set; }
     }
     
     private readonly ConcurrentDictionary<uint, ConnectionInfo> _connectedUsers = new();
@@ -205,6 +206,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
         playerInfo.Online = false;
         _matchmaker.RemovePlayer(userId, null);
+        RemoveFromQueueChat(userId);
         var customId = playerInfo.CustomGameId;
         var gameInstanceId = playerInfo.GameInstanceId;
         if (customId.HasValue && _customGamePlayerLists.TryGetValue(customId.Value, out var list))
@@ -219,6 +221,32 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         }
 
         return _connectedUsers.TryRemove(userId, out _);
+    }
+
+    public void AddToQueueChat(uint playerId)
+    {
+        if (!UserConnected(playerId, out var playerInfo) || playerInfo.InQueueChat) return;
+
+        if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService)) return;
+
+        _globalChatRoom.AddToRoom(playerInfo.Guid, chatService);
+        playerInfo.InQueueChat = true;
+
+        _globalChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} joined the matchmaking queue.");
+    }
+
+    public void RemoveFromQueueChat(uint playerId)
+    {
+        if (!UserConnected(playerId, out var playerInfo) || !playerInfo.InQueueChat) return;
+
+        if (GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
+        {
+            _globalChatRoom.RemoveFromRoom(playerInfo.Guid, chatService);
+        }
+
+        playerInfo.InQueueChat = false;
+
+        _globalChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} left the matchmaking queue.");
     }
 
     public bool UpdateChatName(uint userId, string newName)
@@ -817,13 +845,15 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     _playerDatabase.IsBanned(pId) ||
                     !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker))
                     continue;
-                
+
                 _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker);
+                AddToQueueChat(pId);
             }
         }
         else
         {
             _matchmaker.AddPlayer(gameModeKey, playerId, playerInfo.Guid, playerData.Rating, playerInfo.SquadId, serviceMatchmaker);
+            AddToQueueChat(playerId);
         }
     }
 
@@ -838,14 +868,16 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                 if (!UserConnected(pId, out var pInfo) ||
                     !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker))
                     continue;
-                
+
                 matchServices.Add(matchmaker);
+                RemoveFromQueueChat(pId);
             }
             _matchmaker.RemoveSquad(playerInfo.SquadId.Value, matchServices);
         }
         else
         {
             _matchmaker.RemovePlayer(playerId, serviceMatchmaker);
+            RemoveFromQueueChat(playerId);
         }
     }
 
@@ -921,6 +953,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     {
         if(!_squads.TryGetValue(squadId, out var squad)) return;
         var matchmakersServices = new List<IServiceMatchmaker>();
+        var removedPlayers = new List<uint>();
         foreach (var playerId in squad.GetPlayers())
         {
             if (!UserConnected(playerId, out var playerInfo)) continue;
@@ -928,9 +961,15 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
             {
                 matchmakersServices.Add(serviceMatchmaker);
             }
+            removedPlayers.Add(playerId);
         }
-        
+
         _matchmaker.RemoveSquad(squadId, matchmakersServices);
+
+        foreach (var playerId in removedPlayers)
+        {
+            RemoveFromQueueChat(playerId);
+        }
     }
 
     public bool JoinSquad(uint playerId, ulong squadId)
