@@ -45,11 +45,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     private readonly ConcurrentDictionary<string, IGameInstance> _gameInstances = new();
     private readonly ConcurrentDictionary<string, MatchmakerInitiator> _matchmakerGames = new();
 
-    // Reserved custom game room id used to surface matchmaking chat in the client UI.
-    private const ulong QueueChatCustomGameId = ulong.MaxValue;
+    // Reserved squad id used to surface matchmaking chat in the client UI.
+    private const ulong QueueChatSquadId = ulong.MaxValue;
 
     private readonly ChatRoom _globalChatRoom = new(new RoomIdGlobal(), new SessionSender(server));
-    private readonly ChatRoom _queueChatRoom = new(new RoomIdCustomGame { CustomGameId = QueueChatCustomGameId }, new SessionSender(server));
+    private readonly ChatRoom _queueChatRoom = new(new RoomIdSquad { SquadId = QueueChatSquadId }, new SessionSender(server));
     private readonly ChatPlayer _queueChatAnnouncer = new() { PlayerId = 0, Nickname = "Matchmaking" };
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
