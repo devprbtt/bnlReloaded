@@ -1,33 +1,27 @@
-﻿namespace BNLReloadedServer.Servers;
+using System.Buffers;
+
+namespace BNLReloadedServer.Servers;
 
 public class SessionReader(IServiceDispatcher dispatcher, bool debugMode, string onError)
 {
     private bool _packetInBuffer;
-    private const int BodyMaxSize = 100000000;
-    private MemoryStream _buffer = new();
+    private const int BodyMaxSize = 10_000_000;
+    private byte[] _buffer = ArrayPool<byte>.Shared.Rent(1024);
+    private int _bufferLength;
 
     public void ProcessPacket(byte[] buffer, long offset, long size)
     {
         MemoryStream memStream;
         if (_packetInBuffer)
         {
-            if (_buffer.Length > BodyMaxSize)
-            {
-                WipeBuffer();
+            if (!TryAppendToBuffer(buffer, offset, size, out memStream))
                 return;
-            }
-           
-            var bufferPos = _buffer.Position;
-            _buffer.Seek(_buffer.Length - _buffer.Position, SeekOrigin.Current);
-            _buffer.Write(buffer, (int)offset, (int)size);
-            _buffer.Position = bufferPos;
-            memStream = new MemoryStream(_buffer.GetBuffer(), (int)_buffer.Position, (int)_buffer.Length);
         }
         else
         {
-            memStream = new MemoryStream(buffer, (int)offset, (int)size);
+            memStream = new MemoryStream(buffer, (int)offset, (int)size, writable: false, publiclyVisible: true);
         }
-        
+
         using var reader = new BinaryReader(memStream);
         try
         {
@@ -36,22 +30,19 @@ public class SessionReader(IServiceDispatcher dispatcher, bool debugMode, string
                 // The first part of every packet is an 7 bit encoded int of its length.
                 var startPosition = reader.BaseStream.Position;
                 var startLength = reader.BaseStream.Length;
-                
+
                 var packetLength = reader.Read7BitEncodedInt();
                 if (reader.BaseStream.Position + packetLength > reader.BaseStream.Length)
                 {
                     if (Math.Max(startLength - startPosition, 0) > 0)
                     {
                         _packetInBuffer = true;
-                        memStream.Position = startPosition;
-                        _buffer.SetLength(0);
-                        memStream.CopyTo(_buffer);
-                        _buffer.Position = 0;
+                        BufferPartialPacket(memStream, startPosition);
                     }
-                    
+
                     break;
                 }
-                
+
                 var currentPosition = reader.BaseStream.Position;
                 if (debugMode)
                 {
@@ -80,7 +71,7 @@ public class SessionReader(IServiceDispatcher dispatcher, bool debugMode, string
                     reader.ReadBytes((int)(currentPosition + packetLength - reader.BaseStream.Position));
                 }
 
-                if (_packetInBuffer) 
+                if (_packetInBuffer)
                     WipeBuffer();
             }
         }
@@ -94,9 +85,60 @@ public class SessionReader(IServiceDispatcher dispatcher, bool debugMode, string
         }
     }
 
+    private void BufferPartialPacket(MemoryStream stream, long startPosition)
+    {
+        if (!stream.TryGetBuffer(out var segment))
+        {
+            WipeBuffer();
+            return;
+        }
+
+        var remainingLength = (int)(segment.Count - startPosition);
+        if (remainingLength <= 0 || remainingLength > BodyMaxSize)
+        {
+            WipeBuffer();
+            return;
+        }
+
+        EnsureCapacity(remainingLength);
+        Buffer.BlockCopy(segment.Array!, segment.Offset + (int)startPosition, _buffer, 0, remainingLength);
+        _bufferLength = remainingLength;
+    }
+
+    private bool TryAppendToBuffer(byte[] buffer, long offset, long size, out MemoryStream stream)
+    {
+        var requiredLength = _bufferLength + (int)size;
+        if (requiredLength > BodyMaxSize)
+        {
+            WipeBuffer();
+            stream = new MemoryStream(Array.Empty<byte>());
+            return false;
+        }
+
+        EnsureCapacity(requiredLength);
+        Buffer.BlockCopy(buffer, (int)offset, _buffer, _bufferLength, (int)size);
+        _bufferLength = requiredLength;
+        stream = new MemoryStream(_buffer, 0, _bufferLength, writable: false, publiclyVisible: true);
+        return true;
+    }
+
+    private void EnsureCapacity(int requiredLength)
+    {
+        if (_buffer.Length >= requiredLength)
+            return;
+
+        var newLength = Math.Min(Math.Max(_buffer.Length * 2, requiredLength), BodyMaxSize);
+        var newBuffer = ArrayPool<byte>.Shared.Rent(newLength);
+        Buffer.BlockCopy(_buffer, 0, newBuffer, 0, _bufferLength);
+        ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
+        _buffer = newBuffer;
+    }
+
     private void WipeBuffer()
     {
-        _buffer = new MemoryStream();
+        ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
+        _buffer = ArrayPool<byte>.Shared.Rent(1024);
+        _bufferLength = 0;
         _packetInBuffer = false;
     }
 }

@@ -11,7 +11,10 @@ var toJson = configs.DoToJson();
 var fromJson = configs.DoFromJson();
 var runServer = configs.DoRunServer();
 
-const int bufferSize = 2000000;  // 2MB
+const int masterBufferSize = 512000;   // 500KB for control traffic
+const int regionBufferSize = 1500000;  // 1.5MB for player-facing data
+const int matchBufferSize = 1500000;   // 1.5MB for match traffic
+const int regionClientBufferSize = 750000; // 750KB for upstream client
 
 if (toJson || fromJson)
 {
@@ -21,13 +24,13 @@ if (toJson || fromJson)
     if (toJson)
     {
         var cards = Databases.Catalogue.All;
-        using var fs = new StreamWriter(File.Create(serializedPath2));
-        fs.Write(JsonSerializer.Serialize(cards, JsonHelper.DefaultSerializerSettings).Replace("\\u00A0", "\u00A0"));
+        using var fs = File.Create(serializedPath2);
+        JsonSerializer.Serialize(fs, cards, JsonHelper.DefaultSerializerSettings);
     }
     if (fromJson)
     {
-        using var fs = new StreamReader(File.OpenRead(serializedPath));
-        var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
+        using var fs = File.OpenRead(serializedPath);
+        var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs, JsonHelper.DefaultSerializerSettings);
         if (deserializedCards is not null)
         {
             deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
@@ -125,12 +128,19 @@ if (runServer)
     MasterServer? server = null;
     StatusHttpServer? statusHttpServer = null;
     MasterStatusHttpServer? masterStatusHttpServer = null;
+    using var shutdownCts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;
+        shutdownCts.Cancel();
+    };
     if (masterMode)
     {
         // Create a new TCP server
         server = new MasterServer(configs.MasterIp(), 28100);
-        server.OptionSendBufferSize = bufferSize;
-        server.OptionReceiveBufferSize = bufferSize;
+        server.OptionNoDelay = true;
+        server.OptionSendBufferSize = masterBufferSize;
+        server.OptionReceiveBufferSize = masterBufferSize;
         
         // Start the server
         server.Start();
@@ -148,16 +158,16 @@ if (runServer)
 
     var regionServer = new RegionServer(configs.RegionIp(), 28101);
     regionServer.OptionNoDelay = true;
-    regionServer.OptionSendBufferSize = bufferSize;
-    regionServer.OptionReceiveBufferSize = bufferSize;
+    regionServer.OptionSendBufferSize = regionBufferSize;
+    regionServer.OptionReceiveBufferSize = regionBufferSize;
     var regionClient = new RegionClient(configs.MasterHost(), 28100);
     regionClient.OptionNoDelay = true;
-    regionClient.OptionSendBufferSize = bufferSize;
-    regionClient.OptionReceiveBufferSize = bufferSize;
+    regionClient.OptionSendBufferSize = regionClientBufferSize;
+    regionClient.OptionReceiveBufferSize = regionClientBufferSize;
     var matchServer = new MatchServer(configs.RegionIp(), 28102);
     matchServer.OptionNoDelay = true;
-    matchServer.OptionSendBufferSize = bufferSize;
-    matchServer.OptionReceiveBufferSize = bufferSize;
+    matchServer.OptionSendBufferSize = matchBufferSize;
+    matchServer.OptionReceiveBufferSize = matchBufferSize;
     Databases.SetRegionDatabase(new RegionServerDatabase(regionServer, matchServer));
 
     if (configs.EnableStatusHttp())
@@ -215,7 +225,8 @@ if (runServer)
             }
             else
             {
-                Task.Delay(Timeout.InfiniteTimeSpan).Wait();
+                shutdownCts.Token.WaitHandle.WaitOne();
+                break;
             }
         }
     }

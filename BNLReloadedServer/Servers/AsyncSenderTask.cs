@@ -5,16 +5,30 @@ namespace BNLReloadedServer.Servers;
 
 public class AsyncSenderTask
 {
-    private readonly Channel<byte[]> _packetBuffer = Channel.CreateUnbounded<byte[]>();
+    private const int ChannelCapacity = 512;
+    private readonly Channel<byte[]> _packetBuffer;
     public Guid Id { get; }
 
     public AsyncSenderTask(TcpSession session)
     {
         Id = session.Id;
+        var channelOptions = new BoundedChannelOptions(ChannelCapacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            AllowSynchronousContinuations = false
+        };
+        _packetBuffer = Channel.CreateBounded<byte[]>(channelOptions);
         _ = RunSendTask(session, _packetBuffer.Reader);
     }
 
-    public void SendPacket(byte[] packet) => _packetBuffer.Writer.TryWrite(packet);
+    public void SendPacket(byte[] packet)
+    {
+        if (!_packetBuffer.Writer.TryWrite(packet))
+        {
+            Console.WriteLine($"Send queue full for session {Id}, dropping packet.");
+        }
+    }
 
     private static async Task RunSendTask(TcpSession session, ChannelReader<byte[]> packets)
     {
