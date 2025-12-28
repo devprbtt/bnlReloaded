@@ -225,23 +225,41 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
     public void AddToQueueChat(uint playerId)
     {
-        if (!UserConnected(playerId, out var playerInfo) || playerInfo.InQueueChat) return;
+        if (!UserConnected(playerId, out var playerInfo) || playerInfo.InQueueChat)
+        {
+            Console.WriteLine($"[QueueChat] Skipping add for {playerId}: not connected or already in chat.");
+            return;
+        }
 
-        if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService)) return;
+        if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
+        {
+            Console.WriteLine($"[QueueChat] No chat service for {playerId} (session {playerInfo.Guid}) when adding to queue chat.");
+            return;
+        }
 
         _globalChatRoom.AddToRoom(playerInfo.Guid, chatService);
         playerInfo.InQueueChat = true;
+        Console.WriteLine($"[QueueChat] Added {playerInfo.ChatInfo.Nickname} ({playerId}) to matchmaking chat.");
 
         _globalChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} joined the matchmaking queue.");
     }
 
     public void RemoveFromQueueChat(uint playerId)
     {
-        if (!UserConnected(playerId, out var playerInfo) || !playerInfo.InQueueChat) return;
+        if (!UserConnected(playerId, out var playerInfo) || !playerInfo.InQueueChat)
+        {
+            Console.WriteLine($"[QueueChat] Skipping remove for {playerId}: not connected or not in chat.");
+            return;
+        }
 
         if (GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
         {
             _globalChatRoom.RemoveFromRoom(playerInfo.Guid, chatService);
+            Console.WriteLine($"[QueueChat] Removed {playerInfo.ChatInfo.Nickname} ({playerId}) from matchmaking chat.");
+        }
+        else
+        {
+            Console.WriteLine($"[QueueChat] No chat service for {playerId} (session {playerInfo.Guid}) when removing from queue chat.");
         }
 
         playerInfo.InQueueChat = false;
