@@ -123,7 +123,6 @@ if (toJson || fromJson)
 if (runServer)
 {
     MasterServer? server = null;
-    StatusHttpServer? statusHttpServer = null;
     MasterStatusHttpServer? masterStatusHttpServer = null;
     if (masterMode)
     {
@@ -160,16 +159,6 @@ if (runServer)
     matchServer.OptionReceiveBufferSize = bufferSize;
     Databases.SetRegionDatabase(new RegionServerDatabase(regionServer, matchServer));
 
-    if (configs.EnableStatusHttp())
-    {
-        statusHttpServer = new StatusHttpServer(configs.StatusHttpPrefix(), Databases.RegionServerDatabase);
-        if (!statusHttpServer.Start())
-        {
-            Console.WriteLine("Status HTTP server failed to start; continuing without it.");
-            statusHttpServer = null;
-        }
-    }
-   
     regionServer.Start();
     regionClient.ConnectAsync();
     matchServer.Start();
@@ -227,7 +216,6 @@ if (runServer)
         regionServer.Stop();
         regionClient.DisconnectAndStop();
         masterStatusHttpServer?.Dispose();
-        statusHttpServer?.Dispose();
         if (configs.IsMaster())
         {
             Databases.MasterServerDatabase.RemoveRegionServer("master");
