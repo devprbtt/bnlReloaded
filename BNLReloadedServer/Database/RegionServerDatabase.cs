@@ -30,6 +30,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         public Key? GameModeForSquadInvite { get; set; }
         public bool Online { get; set; } = true;
         public bool IsAdmin { get; } = isAdmin;
+        public bool InQueueChat { get; set; }
     }
     
     private readonly ConcurrentDictionary<uint, ConnectionInfo> _connectedUsers = new();
@@ -44,7 +45,12 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     private readonly ConcurrentDictionary<string, IGameInstance> _gameInstances = new();
     private readonly ConcurrentDictionary<string, MatchmakerInitiator> _matchmakerGames = new();
 
+    // Reserved squad id used to surface matchmaking chat in the client UI.
+    private const ulong QueueChatSquadId = ulong.MaxValue;
+
     private readonly ChatRoom _globalChatRoom = new(new RoomIdGlobal(), new SessionSender(server));
+    private readonly ChatRoom _queueChatRoom = new(new RoomIdSquad { SquadId = QueueChatSquadId }, new SessionSender(server));
+    private readonly ChatPlayer _queueChatAnnouncer = new() { PlayerId = 0, Nickname = "Matchmaking" };
     
     private readonly IPlayerDatabase _playerDatabase = Databases.PlayerDatabase;
 
@@ -205,6 +211,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
         playerInfo.Online = false;
         _matchmaker.RemovePlayer(userId, null);
+        RemoveFromQueueChat(userId);
         var customId = playerInfo.CustomGameId;
         var gameInstanceId = playerInfo.GameInstanceId;
         if (customId.HasValue && _customGamePlayerLists.TryGetValue(customId.Value, out var list))
@@ -219,6 +226,51 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         }
 
         return _connectedUsers.TryRemove(userId, out _);
+    }
+
+    public void AddToQueueChat(uint playerId)
+    {
+        if (!UserConnected(playerId, out var playerInfo) || playerInfo.InQueueChat)
+        {
+            Console.WriteLine($"[QueueChat] Skipping add for {playerId}: not connected or already in chat.");
+            return;
+        }
+
+        if (!GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
+        {
+            Console.WriteLine($"[QueueChat] No chat service for {playerId} (session {playerInfo.Guid}) when adding to queue chat.");
+            return;
+        }
+
+        _queueChatRoom.AddToRoom(playerInfo.Guid, chatService);
+        playerInfo.InQueueChat = true;
+        Console.WriteLine($"[QueueChat] Added {playerInfo.ChatInfo.Nickname} ({playerId}) to matchmaking chat.");
+
+        _queueChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} joined the matchmaking queue.");
+        _queueChatRoom.SendMessage(_queueChatAnnouncer, "Matchmaking chat is active while you wait.");
+    }
+
+    public void RemoveFromQueueChat(uint playerId)
+    {
+        if (!UserConnected(playerId, out var playerInfo) || !playerInfo.InQueueChat)
+        {
+            Console.WriteLine($"[QueueChat] Skipping remove for {playerId}: not connected or not in chat.");
+            return;
+        }
+
+        if (GetService<IServiceChat>(playerInfo.Guid, ServiceId.ServiceChat, out var chatService))
+        {
+            _queueChatRoom.RemoveFromRoom(playerInfo.Guid, chatService);
+            Console.WriteLine($"[QueueChat] Removed {playerInfo.ChatInfo.Nickname} ({playerId}) from matchmaking chat.");
+        }
+        else
+        {
+            Console.WriteLine($"[QueueChat] No chat service for {playerId} (session {playerInfo.Guid}) when removing from queue chat.");
+        }
+
+        playerInfo.InQueueChat = false;
+
+        _queueChatRoom.SendServiceMessage($"{playerInfo.ChatInfo.Nickname} left the matchmaking queue.");
     }
 
     public bool UpdateChatName(uint userId, string newName)
@@ -718,6 +770,10 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     private ChatRoom? GetChatRoom(uint playerId, RoomId roomId)
     {
         if (!UserConnected(playerId, out _)) return null;
+        if (roomId.Type == RoomIdType.CustomGame && roomId.Equals(_queueChatRoom.RoomId))
+        {
+            return _queueChatRoom;
+        }
         return roomId.Type switch
         {
             RoomIdType.Team => GetGameInstance(playerId)?.GetChatRoom(roomId),
@@ -817,7 +873,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     _playerDatabase.IsBanned(pId) ||
                     !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker))
                     continue;
-                
+
                 _matchmaker.AddPlayer(gameModeKey, pId, pInfo.Guid, pData.Rating, pInfo.SquadId, matchmaker);
             }
         }
@@ -838,7 +894,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                 if (!UserConnected(pId, out var pInfo) ||
                     !GetService<IServiceMatchmaker>(pInfo.Guid, ServiceId.ServiceMatchmaker, out var matchmaker))
                     continue;
-                
+
                 matchServices.Add(matchmaker);
             }
             _matchmaker.RemoveSquad(playerInfo.SquadId.Value, matchServices);
@@ -929,7 +985,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                 matchmakersServices.Add(serviceMatchmaker);
             }
         }
-        
+
         _matchmaker.RemoveSquad(squadId, matchmakersServices);
     }
 

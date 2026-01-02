@@ -139,6 +139,8 @@ public class Matchmaker(AsyncTaskTcpServer server)
         queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
         queue.LastJoinTime = DateTimeOffset.Now;
         queue.Sender.Subscribe(guid);
+        Console.WriteLine($"[QueueChat] Queue add for player {playerId} ({guid}) in mode {gameModeKey.Hash}.");
+        Databases.RegionServerDatabase.AddToQueueChat(playerId);
         matchmakerService.SendMatchmakerUpdate(new MatchmakerUpdate
         {
             State = new MatchmakerState
@@ -167,6 +169,8 @@ public class Matchmaker(AsyncTaskTcpServer server)
             queue.Players.Remove(player);
             queue.DoBackfilling.TryRemove(playerId, out _);
             queue.ServiceMatchmaker.SendQueueLeft(playerId);
+
+            Databases.RegionServerDatabase.RemoveFromQueueChat(playerId);
             
             matchmakerService?.SendMatchmakerUpdate(new MatchmakerUpdate
             {
@@ -202,6 +206,8 @@ public class Matchmaker(AsyncTaskTcpServer server)
                 queue.Players.Remove(p);
                 queue.DoBackfilling.TryRemove(p.PlayerId, out _);
                 queue.ServiceMatchmaker.SendQueueLeft(p.PlayerId);
+
+                Databases.RegionServerDatabase.RemoveFromQueueChat(p.PlayerId);
             });
             
             serviceMatchmakers.ForEach(m => m.SendMatchmakerUpdate(new MatchmakerUpdate
