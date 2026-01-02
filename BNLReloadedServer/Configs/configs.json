@@ -15,7 +15,7 @@
   "from_json_name": null,
   "debug_mode": true,
   "do_readline": true,
-  "enable_status_http": true,
-  "status_http_port": 28103,
-  "status_http_host": "*"
+  "enable_master_status_http": true,
+  "master_status_http_port": 28104,
+  "master_status_http_host": "*"
 }

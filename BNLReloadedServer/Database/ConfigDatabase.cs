@@ -11,9 +11,6 @@ public class ConfigDatabase : IConfigDatabase
     private readonly IPAddress _masterIp;
     private readonly IPAddress _regionIp;
     private readonly IPAddress _regionPublicIp;
-    private readonly string _statusHttpHost;
-    private readonly int _statusHttpPort;
-    private readonly bool _enableStatusHttp;
     private readonly string _masterStatusHttpHost;
     private readonly int _masterStatusHttpPort;
     private readonly bool _enableMasterStatusHttp;
@@ -25,9 +22,6 @@ public class ConfigDatabase : IConfigDatabase
         _masterIp = IPAddress.Parse(_configs.MasterHost);
         _regionIp = IPAddress.Parse(_configs.RegionHost);
         _regionPublicIp = IPAddress.Parse(_configs.RegionPublicHost);
-        _statusHttpHost = string.IsNullOrWhiteSpace(_configs.StatusHttpHost) ? "*" : _configs.StatusHttpHost;
-        _statusHttpPort = _configs.StatusHttpPort is > 0 and < 65536 ? _configs.StatusHttpPort : 28103;
-        _enableStatusHttp = _configs.EnableStatusHttp;
         _masterStatusHttpHost = string.IsNullOrWhiteSpace(_configs.MasterStatusHttpHost) ? "*" : _configs.MasterStatusHttpHost;
         _masterStatusHttpPort = _configs.MasterStatusHttpPort is > 0 and < 65536 ? _configs.MasterStatusHttpPort : 28104;
         _enableMasterStatusHttp = _configs.EnableMasterStatusHttp;
@@ -84,14 +78,6 @@ public class ConfigDatabase : IConfigDatabase
     public bool DebugMode() => _configs.DebugMode;
     
     public bool DoReadline() => _configs.DoReadline;
-
-    public bool EnableStatusHttp() => _enableStatusHttp;
-
-    public int StatusHttpPort() => _statusHttpPort;
-
-    public string StatusHttpHost() => _statusHttpHost;
-
-    public string StatusHttpPrefix() => $"http://{_statusHttpHost}:{_statusHttpPort}/";
 
     public bool EnableMasterStatusHttp() => _enableMasterStatusHttp;
 
