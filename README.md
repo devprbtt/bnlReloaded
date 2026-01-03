@@ -12,3 +12,35 @@ The next thing you have to change is the server IP. It's hardcoded to the origin
 The dll changes will be permanent unless you verify the integrity of the game files (or do something to cause steam to do it automatically). You should save a copy of the edited dll somewhere just in case you need to replace it again.
 
 To use the cdb serializer/deserializer, create a folder called Cache in the base directory (should be in the same directory as the BaseTypes, Database, etc. folders). Put the cdb file from the game assets into the new Cache folder. Then change the toJson and fromJson constants to serialize/deserialize the cdb to a json file/zipped cdb file respectively.
+
+# Master HTTP status service
+This repo now includes a master HTTP status endpoint that aggregates data from all connected region servers (and the master itself): online players, ranked/casual queues, custom lobbies, and live match snapshots with player heroes, team, and scoreboard stats.
+
+## How to use
+1. Ensure `BNLReloadedServer/Configs/configs.json` exists.
+2. Set `status_http_port` in `configs.json` (defaults to `8080` if omitted). Set to `0` or negative to disable the HTTP service.
+3. Run the server with `is_master: true`.
+4. Open `http://localhost:<status_http_port>/status` to view JSON.
+
+## Files modified/added for the HTTP service
+- `BNLReloadedServer/Servers/MasterStatusHttpServer.cs`: Kestrel HTTP server exposing `/status`.
+- `BNLReloadedServer/RunServer.cs`: starts/stops the HTTP server when `is_master` is true.
+- `BNLReloadedServer/BNLReloadedServer.csproj`: adds `Microsoft.AspNetCore.App` framework reference.
+- `BNLReloadedServer/Database/Configs.cs`: adds `status_http_port` config field.
+- `BNLReloadedServer/Database/ConfigDatabase.cs`: reads `status_http_port`.
+- `BNLReloadedServer/Database/IConfigDatabase.cs`: interface update for `StatusHttpPort()`.
+- `BNLReloadedServer/Database/DummyConfigDatabase.cs`: adds `StatusHttpPort()` for tests.
+- `BNLReloadedServer/Status/StatusSnapshots.cs`: status DTOs for online/queue/lobby/match snapshots.
+- `BNLReloadedServer/Database/GameInstance.cs`: builds per-match snapshots (hero, team, stats, elapsed time).
+- `BNLReloadedServer/ServerTypes/GameZone.cs`: tracks match elapsed time and freezes it on match end.
+- `BNLReloadedServer/ServerTypes/GameZoneUpdateFunctions.cs`: builds scoreboard stats per player (build/destroyed/earned/k/d/a) and team lookup.
+- `BNLReloadedServer/ServerTypes/GameLobby.cs`: exposes lobby player snapshot list.
+- `BNLReloadedServer/ServerTypes/Matchmaker.cs`: exposes queue snapshots safely.
+- `BNLReloadedServer/Database/RegionServerDatabase.cs`: builds region snapshots (online/queues/custom lobbies/matches).
+- `BNLReloadedServer/Database/IRegionServerDatabase.cs`: interface update for `BuildStatusSnapshot()`.
+- `BNLReloadedServer/Database/MasterServerDatabase.cs`: stores latest per-region snapshots.
+- `BNLReloadedServer/Database/IMasterServerDatabase.cs`: interface update for region status snapshot methods.
+- `BNLReloadedServer/Service/ServiceRegionServer.cs`: sends region snapshot payloads to master.
+- `BNLReloadedServer/Service/ServiceMasterServer.cs`: receives region snapshots on master.
+- `BNLReloadedServer/Service/IServiceRegionServer.cs`: interface update for `SendRegionStatus()`.
+- `BNLReloadedServer/Servers/RegionClient.cs`: periodically sends snapshots to master.
