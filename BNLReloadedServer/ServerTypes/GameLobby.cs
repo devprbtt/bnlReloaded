@@ -329,6 +329,8 @@ public class GameLobby : Updater
 
     public PlayerLobbyState? GetPlayerLobbyState(uint playerId) => LobbyData.Players.GetValueOrDefault(playerId);
 
+    public List<PlayerLobbyState> GetPlayersSnapshot() => LobbyData.Players.Values.ToList();
+
     private LobbyTimer GetRequeueTimer(uint playerId)
     {
         if (_requeueLobbyTimers.TryGetValue(playerId, out var value))

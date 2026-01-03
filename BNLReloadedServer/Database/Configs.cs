@@ -14,6 +14,7 @@ public class Configs
     public required string RegionPublicHost { get; init; }
     public required string RegionName { get; init; }
     public required string RegionIcon { get; init; }
+    public int? StatusHttpPort { get; init; }
     public bool ToJson { get; init; }
     public string? ToJsonName { get; init; }
     public bool FromJson { get; init; }

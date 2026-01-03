@@ -44,6 +44,8 @@ public class ConfigDatabase : IConfigDatabase
 
     public IPAddress RegionPublicIp() => _regionPublicIp;
 
+    public int StatusHttpPort() => _configs.StatusHttpPort ?? 8080;
+
     public RegionGuiInfo GetRegionInfo() => new()
     {
         Icon = _configs.RegionIcon,

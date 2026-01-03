@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Status;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
 using Moserware.Skills;
@@ -85,4 +86,5 @@ public interface IGameInstance
     public void Surrender(ushort rpcId, uint playerId, IServiceZone surrenderService);
     public void SurrenderVote(uint playerId, bool accept);
     public void EditorCommand(uint playerId, MapEditorCommand command, bool force);
+    public GameInstanceSnapshot GetStatusSnapshot();
 }

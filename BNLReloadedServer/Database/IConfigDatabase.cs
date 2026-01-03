@@ -17,6 +17,7 @@ public interface IConfigDatabase
     public string RegionPublicHost();
     public IPAddress RegionIp();
     public IPAddress RegionPublicIp();
+    public int StatusHttpPort();
     public RegionGuiInfo GetRegionInfo();
     public string ToJsonCdbName();
     public string FromJsonCdbName();

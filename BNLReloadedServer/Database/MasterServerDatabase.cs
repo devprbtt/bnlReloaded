@@ -2,6 +2,7 @@
 using System.Text;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 using SQLite;
 
@@ -11,6 +12,7 @@ public class MasterServerDatabase : IMasterServerDatabase
 {
     private readonly List<RegionInfo> _regionServers = [];
     private readonly ConcurrentDictionary<string, IServiceMasterServer> _regionServerConnections = new();
+    private readonly ConcurrentDictionary<string, RegionStatusSnapshot> _regionStatus = new();
     private readonly SQLiteAsyncConnection _playerDb;
     
     private readonly SemaphoreSlim _asyncLock = new(1, 1);
@@ -44,6 +46,7 @@ public class MasterServerDatabase : IMasterServerDatabase
     {
         if (_regionServerConnections.Remove(id, out _))
         {
+            _regionStatus.TryRemove(id, out _);
             return _regionServers.RemoveAll(r => r.Id == id) > 0;
         }
         
@@ -51,6 +54,20 @@ public class MasterServerDatabase : IMasterServerDatabase
     }
 
     public RegionInfo? GetRegionServer(string id) => _regionServers.FirstOrDefault(x => x.Id == id);
+
+    public void UpdateRegionStatus(string regionId, RegionStatusSnapshot snapshot)
+    {
+        var regionInfo = _regionServers.FirstOrDefault(r => r.Id == regionId);
+        var updatedSnapshot = snapshot with
+        {
+            RegionId = regionId,
+            RegionName = regionInfo?.Info?.Name?.Text ?? snapshot.RegionName,
+            RegionHost = regionInfo?.Host ?? snapshot.RegionHost
+        };
+        _regionStatus[regionId] = updatedSnapshot;
+    }
+
+    public List<RegionStatusSnapshot> GetRegionStatusSnapshots() => _regionStatus.Values.ToList();
 
     public async Task<PlayerData> AddPlayer(ulong steamId, string playerName, string region)
     {

@@ -1,0 +1,19 @@
+{
+  "is_master": true,
+  "run_server": true,
+  "use_master_cdb": false,
+  "cdb_name": "cdb",
+  "master_host": "127.0.0.1",
+  "master_public_host": "127.0.0.1",
+  "region_host": "127.0.0.1",
+  "region_public_host": "127.0.0.1",
+  "region_name": "Local",
+  "region_icon": "server_namericaeast",
+  "status_http_port": 8080,
+  "to_json": false,
+  "to_json_name": "currCdb3.json",
+  "from_json": false,
+  "from_json_name": "currCdb2.json",
+  "debug_mode": false,
+  "do_readline": true
+}

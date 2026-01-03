@@ -6,6 +6,7 @@ using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Moserware.Skills;
@@ -40,6 +41,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
     private readonly Dictionary<Guid, Dictionary<ServiceId, IService>> _matchServices = new();
     
     private readonly OrderedDictionary<ulong, (CustomGamePlayerGroup custom, ISender customSender)> _customGamePlayerLists = new();
+    private readonly object _customGameLock = new();
     
     private readonly ConcurrentDictionary<string, IGameInstance> _gameInstances = new();
     private readonly ConcurrentDictionary<string, MatchmakerInitiator> _matchmakerGames = new();
@@ -136,7 +138,16 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         _matchmaker.RemovePlayer(userId, null);
         var customId = playerInfo.CustomGameId;
         var gameInstanceId = playerInfo.GameInstanceId;
-        if (customId.HasValue && _customGamePlayerLists.TryGetValue(customId.Value, out var list))
+        (CustomGamePlayerGroup custom, ISender customSender) list = default;
+        var hasCustom = false;
+        if (customId.HasValue)
+        {
+            lock (_customGameLock)
+            {
+                hasCustom = _customGamePlayerLists.TryGetValue(customId.Value, out list);
+            }
+        }
+        if (hasCustom)
         {
             if (list.custom.GameInfo.Status != CustomGameStatus.Preparing) return false;
             RemoveFromCustomGame(userId);
@@ -306,21 +317,28 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         gameInstance?.RemoveService(player.Guid);
     }
 
-    public List<CustomGameInfo> GetCustomGames() =>
-        _customGamePlayerLists.Values.Select(x => x.custom.GameInfo).ToList();
+    public List<CustomGameInfo> GetCustomGames()
+    {
+        lock (_customGameLock)
+        {
+            return _customGamePlayerLists.Values.Select(x => x.custom.GameInfo).ToList();
+        }
+    }
 
     private bool GetCustomGame(uint playerId, [MaybeNullWhen(false)] out CustomGamePlayerGroup custom)
     {
         custom = null;
         if (!UserConnected(playerId, out var info)) return false;
         var playerCustomGame = info.CustomGameId;
-        if (playerCustomGame != null && _customGamePlayerLists.TryGetValue(playerCustomGame.Value, out var cust))
+        if (playerCustomGame != null)
         {
-            custom = cust.custom;
-        }
-        else
-        {
-            custom = null;
+            lock (_customGameLock)
+            {
+                if (_customGamePlayerLists.TryGetValue(playerCustomGame.Value, out var cust))
+                {
+                    custom = cust.custom;
+                }
+            }
         }
         
         return custom != null;
@@ -353,25 +371,40 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
             playerGroup.ChatRoom.AddToRoom(playerGuid, chatService);
         }
         
-        _customGamePlayerLists.Add(newCustom.Id, (playerGroup, sender));
+        lock (_customGameLock)
+        {
+            _customGamePlayerLists.Add(newCustom.Id, (playerGroup, sender));
+        }
         return newCustom.Id;
     }
 
     public bool RemoveCustomGame(ulong gameId)
     {
-        if(!_customGamePlayerLists.TryGetValue(gameId, out var list)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) list;
+        lock (_customGameLock)
+        {
+            if(!_customGamePlayerLists.TryGetValue(gameId, out list)) return false;
+        }
         foreach (var playerId in list.custom.Players.Select(player => player.Id))
         {
             if(UserConnected(playerId, out _)) 
                 RemoveFromCustomGame(playerId);
         }
         list.custom.Stop();
-        return _customGamePlayerLists.Remove(gameId);
+        lock (_customGameLock)
+        {
+            return _customGamePlayerLists.Remove(gameId);
+        }
     }
 
     public CustomGameJoinResult AddToCustomGame(uint playerId, ulong gameId, string password)
     {
-        if (!UserConnected(playerId, out var playerInfo) || !_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return CustomGameJoinResult.NoSuchGame;
+        if (!UserConnected(playerId, out var playerInfo)) return CustomGameJoinResult.NoSuchGame;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return CustomGameJoinResult.NoSuchGame;
+        }
         var playerGuid = playerInfo.Guid;
         if (password != customGame.custom.Password && !playerInfo.IsAdmin) return CustomGameJoinResult.WrongPassword;
         if (!customGame.custom.GameInfo.AllowBackfilling && !playerInfo.IsAdmin &&
@@ -398,7 +431,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         var playerGuid = playerInfo.Guid;
         playerInfo.GameInstanceId = customGame.custom.GameInstanceId;
         
@@ -414,8 +451,12 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
     public CustomGameSpectateResult CheckSpectateCustomGame(uint playerId, ulong gameId, string password)
     {
-        if (!UserConnected(playerId, out var playerInfo) || !_customGamePlayerLists.TryGetValue(gameId, out var customGame))
-            return CustomGameSpectateResult.NoSuchGame;
+        if (!UserConnected(playerId, out var playerInfo)) return CustomGameSpectateResult.NoSuchGame;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return CustomGameSpectateResult.NoSuchGame;
+        }
         
         if (password != customGame.custom.Password && !playerInfo.IsAdmin) return CustomGameSpectateResult.WrongPassword;
         if (customGame.custom.IsMaxSpectators()) return CustomGameSpectateResult.TooManySpectators;
@@ -430,8 +471,13 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
     public bool SpectateCustomGame(uint playerId, ulong gameId)
     {
-        if (!UserConnected(playerId, out var playerInfo) || !_customGamePlayerLists.TryGetValue(gameId, out var customGame) ||
-            customGame.custom.GameInstanceId is null ||
+        if (!UserConnected(playerId, out var playerInfo)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
+        if (customGame.custom.GameInstanceId is null ||
             !_gameInstances.TryGetValue(customGame.custom.GameInstanceId, out var instance)) return false;
         
         if (!customGame.custom.AddSpectator(playerId)) return false;
@@ -447,7 +493,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         var playerGuid = playerInfo.Guid;
         if (GetService<IServiceChat>(playerGuid, ServiceId.ServiceChat, out var chatService))
         {
@@ -470,7 +520,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         if (!customGame.custom.KickPlayer(playerId, kickerId)) return false;
         var playerGuid = playerInfo.Guid;
         customGame.customSender.Unsubscribe(playerGuid);
@@ -490,7 +544,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        _customGamePlayerLists.TryGetValue(gameId, out var customGame);
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         customGame.custom.EnqueueAction(() => customGame.custom.SwapTeam(playerId));
         return true;
     }
@@ -501,7 +559,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        _customGamePlayerLists.TryGetValue(gameId, out var customGame);
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         customGame.custom.EnqueueAction(() => customGame.custom.UpdateSettings(playerId, settings));
         return true;
     }
@@ -512,7 +574,12 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = playerInfo.CustomGameId;
         if (!customId.HasValue) return null;
         var gameId = customId.Value;
-        return _customGamePlayerLists.TryGetValue(gameId, out var customGame) ? customGame.custom.GetCustomGameUpdate() : null;
+        lock (_customGameLock)
+        {
+            return _customGamePlayerLists.TryGetValue(gameId, out var customGame)
+                ? customGame.custom.GetCustomGameUpdate()
+                : null;
+        }
     }
 
     public bool StartCustomGame(uint playerId, string? signedMap)
@@ -521,7 +588,11 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         var customId = info.CustomGameId;
         if (!customId.HasValue) return false;
         var gameId = customId.Value;
-        if (!_customGamePlayerLists.TryGetValue(gameId, out var customGame)) return false;
+        (CustomGamePlayerGroup custom, ISender customSender) customGame;
+        lock (_customGameLock)
+        {
+            if (!_customGamePlayerLists.TryGetValue(gameId, out customGame)) return false;
+        }
         
         MapData? map = null;
         if (signedMap != null)
@@ -973,5 +1044,142 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         {
             gameInstance.PlayerLeftInstance(playerId, KickReason.MatchInactivity);
         }
+    }
+
+    public RegionStatusSnapshot BuildStatusSnapshot()
+    {
+        var instanceSnapshots = _gameInstances.Values
+            .Select(instance => instance.GetStatusSnapshot())
+            .ToList();
+
+        var playerTeams = instanceSnapshots
+            .SelectMany(instance => instance.Players)
+            .Where(player => player.Team.HasValue)
+            .GroupBy(player => player.PlayerId)
+            .ToDictionary(group => group.Key, group => group.First().Team);
+
+        var onlinePlayers = _connectedUsers.Values
+            .Where(player => player.Online)
+            .Select(player => new PlayerSnapshot
+            {
+                PlayerId = player.ChatInfo.PlayerId,
+                Name = player.ChatInfo.Nickname,
+                Team = playerTeams.GetValueOrDefault(player.ChatInfo.PlayerId)
+            })
+            .OrderBy(player => player.Name)
+            .ToList();
+
+        var rankedQueuePlayers = _matchmaker.GetQueuePlayers(CatalogueHelper.ModeRanked.Key)
+            .Select(player => new PlayerSnapshot
+            {
+                PlayerId = player.PlayerId,
+                Name = _playerDatabase.GetPlayerName(player.PlayerId),
+                Team = playerTeams.GetValueOrDefault(player.PlayerId)
+            })
+            .OrderBy(player => player.Name)
+            .ToList();
+
+        var casualQueuePlayers = _matchmaker.GetQueuePlayers(CatalogueHelper.ModeFriendly.Key)
+            .Select(player => new PlayerSnapshot
+            {
+                PlayerId = player.PlayerId,
+                Name = _playerDatabase.GetPlayerName(player.PlayerId),
+                Team = playerTeams.GetValueOrDefault(player.PlayerId)
+            })
+            .OrderBy(player => player.Name)
+            .ToList();
+
+        var rankedMatches = instanceSnapshots
+            .Where(snapshot => !snapshot.IsCustom && !snapshot.IsMapEditor && snapshot.Ranking == GameRankingType.Ranked)
+            .Select(ToMatchSnapshot)
+            .ToList();
+
+        var casualMatches = instanceSnapshots
+            .Where(snapshot => !snapshot.IsCustom && !snapshot.IsMapEditor && snapshot.Ranking == GameRankingType.Friendly)
+            .Select(ToMatchSnapshot)
+            .ToList();
+
+        var customLobbies = new List<LobbySnapshot>();
+        lock (_customGameLock)
+        {
+            foreach (var (customId, customEntry) in _customGamePlayerLists)
+            {
+                var custom = customEntry.custom;
+                var status = custom.GameInfo.Status.ToString().ToLowerInvariant();
+                var hasStarted = custom.GameInfo.Status != CustomGameStatus.Preparing;
+                var players = custom.Players.Select(p => new PlayerSnapshot
+                    {
+                        PlayerId = p.Id,
+                        Name = p.Nickname,
+                        Team = p.Team
+                    })
+                    .OrderBy(player => player.Name)
+                    .ToList();
+                var elapsedSeconds = 0f;
+
+                if (custom.GameInstanceId is not null &&
+                    _gameInstances.TryGetValue(custom.GameInstanceId, out var instance))
+                {
+                    var instanceSnapshot = instance.GetStatusSnapshot();
+                    elapsedSeconds = instanceSnapshot.MatchElapsedSeconds;
+                    if (instanceSnapshot.Players.Count > 0)
+                    {
+                        players = instanceSnapshot.Players;
+                    }
+                }
+
+                customLobbies.Add(new LobbySnapshot
+                {
+                    LobbyId = customId.ToString(),
+                    Name = custom.GameInfo.GameName,
+                    LobbyName = custom.GameInfo.GameName,
+                    IsPrivate = custom.GameInfo.Private,
+                    PlayerCount = custom.GameInfo.Players,
+                    Status = status,
+                    HasStarted = hasStarted,
+                    MatchElapsedSeconds = elapsedSeconds,
+                    Players = players
+                });
+            }
+        }
+
+        return new RegionStatusSnapshot
+        {
+            RegionId = Databases.ConfigDatabase.RegionPublicHost(),
+            RegionName = Databases.ConfigDatabase.GetRegionInfo().Name?.Text,
+            RegionHost = Databases.ConfigDatabase.RegionPublicHost(),
+            GeneratedAt = DateTimeOffset.UtcNow,
+            Online = new OnlineSnapshot
+            {
+                Count = onlinePlayers.Count,
+                Players = onlinePlayers
+            },
+            RankedQueue = new QueueSnapshot
+            {
+                Count = rankedQueuePlayers.Count,
+                Players = rankedQueuePlayers
+            },
+            CasualQueue = new QueueSnapshot
+            {
+                Count = casualQueuePlayers.Count,
+                Players = casualQueuePlayers
+            },
+            CustomLobbies = customLobbies,
+            RankedMatches = rankedMatches,
+            CasualMatches = casualMatches
+        };
+    }
+
+    private static MatchSnapshot ToMatchSnapshot(GameInstanceSnapshot snapshot)
+    {
+        return new MatchSnapshot
+        {
+            MatchId = snapshot.InstanceId,
+            Name = snapshot.InstanceId,
+            Status = snapshot.Status,
+            HasStarted = snapshot.HasStarted,
+            MatchElapsedSeconds = snapshot.MatchElapsedSeconds,
+            Players = snapshot.Players
+        };
     }
 }

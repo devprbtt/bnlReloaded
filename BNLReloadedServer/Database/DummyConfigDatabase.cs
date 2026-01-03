@@ -28,6 +28,8 @@ public class DummyConfigDatabase : IConfigDatabase
     
     public IPAddress RegionPublicIp() => IPAddress.Parse(RegionPublicHost());
 
+    public int StatusHttpPort() => 8080;
+
     public RegionGuiInfo GetRegionInfo() => new()
     {
         Icon = "server_namericaeast",

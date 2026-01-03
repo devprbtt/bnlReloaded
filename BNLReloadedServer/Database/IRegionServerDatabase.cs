@@ -1,6 +1,7 @@
 ﻿using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 
 namespace BNLReloadedServer.Database;
@@ -64,4 +65,5 @@ public interface IRegionServerDatabase
     public ulong? GetSquadId(uint playerId);
     public void SendAfkWarning(uint playerId, string gameInstanceId);
     public void KickForAfk(uint playerId, string gameInstanceId);
+    public RegionStatusSnapshot BuildStatusSnapshot();
 }

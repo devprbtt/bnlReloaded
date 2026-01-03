@@ -2,6 +2,7 @@
 using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 
 namespace BNLReloadedServer.Service;
@@ -31,10 +32,12 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessageRegionStatus = 22
     }
     
     private readonly IMasterServerDatabase _masterServerDatabase = Databases.MasterServerDatabase;
+    private string? _regionId;
     
     private static BinaryWriter CreateWriter()
     {
@@ -181,10 +184,12 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         if (host == Databases.ConfigDatabase.MasterPublicHost())
         {
             _masterServerDatabase.AddRegionServer("master", host, regionInfo, this);
+            _regionId = "master";
         }
         else
         {
             _masterServerDatabase.AddRegionServer(sessionId.ToString(), host, regionInfo, this);
+            _regionId = sessionId.ToString();
             SendMasterCdb(CatalogueCache.Load());
             foreach (var map in Databases.MapDatabase.GetMapCards())
             {
@@ -313,6 +318,15 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
         SendLeaderboard(rpcId, _masterServerDatabase.GetLeaderboard().Result);
     }
 
+    public void ReceiveRegionStatus(BinaryReader reader)
+    {
+        var json = reader.ReadString();
+        var snapshot = json.Deserialize<RegionStatusSnapshot>();
+        if (snapshot == null) return;
+        var regionId = _regionId ?? sessionId.ToString();
+        _masterServerDatabase.UpdateRegionStatus(regionId, snapshot);
+    }
+
     public bool Receive(BinaryReader reader)
     {
         var serviceMasterId = reader.ReadByte();
@@ -376,6 +390,9 @@ public class ServiceMasterServer(ISender sender, Guid sessionId) : IServiceMaste
                 break;
             case ServiceMasterId.MessageGetLeaderboard:
                 ReceiveLeaderboard(reader);
+                break;
+            case ServiceMasterId.MessageRegionStatus:
+                ReceiveRegionStatus(reader);
                 break;
             default:
                 Console.WriteLine($"Master service received unsupported serviceId: {serviceMasterId}");

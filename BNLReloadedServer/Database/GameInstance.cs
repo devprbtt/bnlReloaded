@@ -5,6 +5,7 @@ using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Servers;
 using BNLReloadedServer.ServerTypes;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 using NetCoreServer;
 using Timer = System.Timers.Timer;
@@ -353,6 +354,69 @@ public class GameInstance : IGameInstance
     }
 
     public Key GetGameMode() => GameInitiator.GetGameMode();
+
+    public GameInstanceSnapshot GetStatusSnapshot()
+    {
+        var gameModeKey = GameInitiator.GetGameMode();
+        var gameModeCard = Databases.Catalogue.GetCard<CardGameMode>(gameModeKey);
+        var lobbyPlayers = Lobby?.GetPlayersSnapshot() ?? [];
+        var scoreSnapshots = Zone?.GetPlayerScoreSnapshots() ?? new Dictionary<uint, PlayerScoreSnapshot>();
+        var teamSnapshots = Zone?.GetPlayerTeams() ?? new Dictionary<uint, TeamType?>();
+        var playerSnapshots = new Dictionary<uint, PlayerSnapshot>();
+
+        foreach (var player in lobbyPlayers)
+        {
+            playerSnapshots[player.PlayerId] = new PlayerSnapshot
+            {
+                PlayerId = player.PlayerId,
+                Name = player.Nickname,
+                Hero = StatusSnapshotHelpers.GetKeyId(player.Hero),
+                Team = player.Team,
+                Stats = scoreSnapshots.GetValueOrDefault(player.PlayerId) ?? new PlayerScoreSnapshot()
+            };
+        }
+
+        foreach (var (playerId, stats) in scoreSnapshots)
+        {
+            if (playerSnapshots.ContainsKey(playerId))
+            {
+                continue;
+            }
+
+            playerSnapshots[playerId] = new PlayerSnapshot
+            {
+                PlayerId = playerId,
+                Name = Databases.PlayerDatabase.GetPlayerName(playerId),
+                Hero = null,
+                Team = teamSnapshots.GetValueOrDefault(playerId),
+                Stats = stats
+            };
+        }
+
+        var hasEnded = IsOver();
+        var hasStarted = IsStarted;
+        var status = hasEnded
+            ? "ended"
+            : hasStarted
+                ? "match"
+                : HasLobby()
+                    ? "lobby"
+                    : "waiting";
+
+        return new GameInstanceSnapshot
+        {
+            InstanceId = GameInstanceId,
+            GameModeId = gameModeCard?.Id ?? gameModeKey.ToString(),
+            Ranking = gameModeCard?.Ranking ?? GameRankingType.None,
+            IsCustom = gameModeKey == CatalogueHelper.ModeCustom.Key,
+            IsMapEditor = GameInitiator.IsMapEditor(),
+            HasStarted = hasStarted,
+            HasEnded = hasEnded,
+            Status = status,
+            MatchElapsedSeconds = Zone?.GetMatchElapsedSeconds() ?? 0f,
+            Players = playerSnapshots.Values.ToList()
+        };
+    }
 
 
     public bool NeedsBackfill() => GameInitiator.NeedsBackfill();

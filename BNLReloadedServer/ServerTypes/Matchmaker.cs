@@ -37,6 +37,7 @@ public class Matchmaker(AsyncTaskTcpServer server)
     {
         public Key GameModeKey { get; init; }
         public List<PlayerQueueData> Players { get; set; } = [];
+        public object Sync { get; } = new();
         public ConcurrentDictionary<uint, bool> DoBackfilling { get; } = new();
         public required SessionSender Sender { get; init; }
         public required SessionSender MatchSender1 { get; init; }
@@ -61,11 +62,16 @@ public class Matchmaker(AsyncTaskTcpServer server)
         public bool EnoughForPop()
         {
             var maxPlayers = GameModeCard.PlayersPerTeam * 2;
+            var playersCount = 0;
+            lock (Sync)
+            {
+                playersCount = Players.Count;
+            }
             return (DateTimeOffset.Now - LastJoinTime).TotalSeconds > MaxSecondWaitTimeTillShorthandedGame &&
                 GameModeKey != CatalogueHelper.ModeRanked.Key &&
                 Databases.RegionServerDatabase.GetActiveGamesCount(GameModeKey) <= 0
-                    ? Players.Count >= maxPlayers - MaxThresholdOfShorthandedness
-                    : Players.Count >= maxPlayers;
+                    ? playersCount >= maxPlayers - MaxThresholdOfShorthandedness
+                    : playersCount >= maxPlayers;
         }
     }
     
@@ -106,15 +112,29 @@ public class Matchmaker(AsyncTaskTcpServer server)
         {
         }
 
-        queue?.QueueLoop = null;
-        queue?.ConfTime = null;
-        queue?.AcceptVotes1.Clear();
-        queue?.AcceptVotes2.Clear();
-        queue?.MatchSender1.UnsubscribeAll();
-        queue?.MatchSender2.UnsubscribeAll();
-        queue?.Sender.UnsubscribeAll();
-        queue?.IsPop = PopStatus.None;
-        queue?.Players.Clear();
+        if (queue == null) return;
+
+        lock (queue.Sync)
+        {
+            queue.QueueLoop = null;
+            queue.ConfTime = null;
+            queue.AcceptVotes1.Clear();
+            queue.AcceptVotes2.Clear();
+            queue.MatchSender1.UnsubscribeAll();
+            queue.MatchSender2.UnsubscribeAll();
+            queue.Sender.UnsubscribeAll();
+            queue.IsPop = PopStatus.None;
+            queue.Players.Clear();
+        }
+    }
+
+    public List<PlayerQueueData> GetQueuePlayers(Key gameModeKey)
+    {
+        if (!_queues.TryGetValue(gameModeKey, out var queue)) return [];
+        lock (queue.Sync)
+        {
+            return queue.Players.ToList();
+        }
     }
 
     public void AddPlayer(Key gameModeKey, uint playerId, Guid guid, Rating rating, ulong? squadId, IServiceMatchmaker matchmakerService)
@@ -125,9 +145,14 @@ public class Matchmaker(AsyncTaskTcpServer server)
         }
         
         if (!_queues.TryGetValue(gameModeKey, out var queue)) return;
-        queue.Players.RemoveAll(p => p.PlayerId == playerId);
-        queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
-        queue.LastJoinTime = DateTimeOffset.Now;
+        int playerCount;
+        lock (queue.Sync)
+        {
+            queue.Players.RemoveAll(p => p.PlayerId == playerId);
+            queue.Players.Add(new PlayerQueueData(playerId, guid, rating, DateTimeOffset.Now, squadId));
+            queue.LastJoinTime = DateTimeOffset.Now;
+            playerCount = queue.Players.Count;
+        }
         queue.Sender.Subscribe(guid);
         matchmakerService.SendMatchmakerUpdate(new MatchmakerUpdate
         {
@@ -140,7 +165,7 @@ public class Matchmaker(AsyncTaskTcpServer server)
         
         SendQueueUpdate(queue.ServiceMatchmaker, new MatchmakerUpdate
         {
-            PlayersInQueue = queue.Players.Count
+            PlayersInQueue = playerCount
         });
         
         QueueCheck(queue);
@@ -148,14 +173,25 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
     public void RemovePlayer(uint playerId, IServiceMatchmaker? matchmakerService)
     {
-        foreach (var queue in _queues.Values.Where(x => x.Players.Any(p => p.PlayerId == playerId)).ToList())
+        foreach (var queue in _queues.Values.ToList())
         {
-            var player = queue.Players.First(p => p.PlayerId == playerId);
+            PlayerQueueData? player;
+            int playerCount;
+            lock (queue.Sync)
+            {
+                player = queue.Players.FirstOrDefault(p => p.PlayerId == playerId);
+                if (player == null)
+                {
+                    continue;
+                }
+                queue.Players.Remove(player);
+                queue.DoBackfilling.TryRemove(playerId, out _);
+                playerCount = queue.Players.Count;
+            }
+
             queue.Sender.Unsubscribe(player.PlayerGuid);
             queue.MatchSender1.Unsubscribe(player.PlayerGuid);
             queue.MatchSender2.Unsubscribe(player.PlayerGuid);
-            queue.Players.Remove(player);
-            queue.DoBackfilling.TryRemove(playerId, out _);
             queue.ServiceMatchmaker.SendQueueLeft(playerId);
             
             matchmakerService?.SendMatchmakerUpdate(new MatchmakerUpdate
@@ -168,11 +204,11 @@ public class Matchmaker(AsyncTaskTcpServer server)
             
             SendQueueUpdate(queue.ServiceMatchmaker, new MatchmakerUpdate
             {
-                PlayersInQueue = queue.Players.Count
+                PlayersInQueue = playerCount
             });
             
 
-            if (queue.Players.Count == 0)
+            if (playerCount == 0)
             {
                 StopQueue(queue.GameModeKey);
             }
@@ -181,16 +217,30 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
     public void RemoveSquad(ulong squadId, List<IServiceMatchmaker> serviceMatchmakers)
     {
-        foreach (var queue in _queues.Values.Where(x => x.Players.Any(p => p.SquadId == squadId)).ToList())
+        foreach (var queue in _queues.Values.ToList())
         {
-            var players = queue.Players.Where(p => p.SquadId == squadId).ToList();
+            List<PlayerQueueData> players;
+            int playerCount;
+            lock (queue.Sync)
+            {
+                players = queue.Players.Where(p => p.SquadId == squadId).ToList();
+                if (players.Count == 0)
+                {
+                    continue;
+                }
+                foreach (var player in players)
+                {
+                    queue.Players.Remove(player);
+                    queue.DoBackfilling.TryRemove(player.PlayerId, out _);
+                }
+                playerCount = queue.Players.Count;
+            }
+
             players.ForEach(p =>
             {
                 queue.Sender.Unsubscribe(p.PlayerGuid);
                 queue.MatchSender1.Unsubscribe(p.PlayerGuid);
                 queue.MatchSender2.Unsubscribe(p.PlayerGuid);
-                queue.Players.Remove(p);
-                queue.DoBackfilling.TryRemove(p.PlayerId, out _);
                 queue.ServiceMatchmaker.SendQueueLeft(p.PlayerId);
             });
             
@@ -204,10 +254,10 @@ public class Matchmaker(AsyncTaskTcpServer server)
             
             SendQueueUpdate(queue.ServiceMatchmaker, new MatchmakerUpdate
             {
-                PlayersInQueue = queue.Players.Count
+                PlayersInQueue = playerCount
             });
             
-            if (queue.Players.Count == 0)
+            if (playerCount == 0)
             {
                 StopQueue(queue.GameModeKey);
             }
@@ -216,35 +266,57 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
     public void SetDoBackfilling(uint playerId, bool value)
     {
-        foreach (var queue in _queues.Values.Where(x => x.Players.Any(p => p.PlayerId == playerId)).ToList())
+        foreach (var queue in _queues.Values.ToList())
         {
-            queue.DoBackfilling[playerId] = value;
+            lock (queue.Sync)
+            {
+                if (!queue.Players.Any(p => p.PlayerId == playerId))
+                {
+                    continue;
+                }
+                queue.DoBackfilling[playerId] = value;
+            }
         }
     }
 
     public void ForceStartGame(uint playerId)
     {
-        foreach (var queue in _queues.Values.Where(x => x.Players.Any(p => p.PlayerId == playerId)).ToList())
+        foreach (var queue in _queues.Values.ToList())
         {
-            if (queue.IsPop is not PopStatus.None)
+            List<List<PlayerQueueData>>? balance = null;
+            lock (queue.Sync)
             {
-                continue;
+                if (!queue.Players.Any(p => p.PlayerId == playerId))
+                {
+                    continue;
+                }
+
+                if (queue.IsPop is not PopStatus.None)
+                {
+                    continue;
+                }
+
+                if (queue.Players.Count < 1)
+                    return;
+
+                queue.IsPop = PopStatus.Match;
+                balance = queue.Players.Count == 1 ? [[queue.Players.First()], []] : DoQueueBalance(queue, true);
+
+                if (balance == null)
+                {
+                    queue.IsPop = PopStatus.None;
+                    continue;
+                }
+                
+                queue.Team1 = balance[0];
+                queue.Team2 = balance[1];
             }
-
-            if (queue.Players.Count < 1)
-                return;
-
-            queue.IsPop = PopStatus.Match;
-            var balance = queue.Players.Count == 1 ? [[queue.Players.First()], []] : DoQueueBalance(queue, true);
 
             if (balance == null)
             {
-                queue.IsPop = PopStatus.None;
                 continue;
             }
-            
-            queue.Team1 = balance[0];
-            queue.Team2 = balance[1];
+
             foreach (var player in balance[0].Union(balance[1]))
             {
                 queue.MatchSender1.Subscribe(player.PlayerGuid);
@@ -279,8 +351,12 @@ public class Matchmaker(AsyncTaskTcpServer server)
     private static (PlayerQueueData? Team1Backfill, PlayerQueueData? Team2Backfill) DoBackfillBalance(QueueData queue, double minQuality,
         BackfillInfo backfillInfo)
     {
-        var validPlayers = queue.Players
-            .Where(p => p.SquadId is null && queue.DoBackfilling.GetValueOrDefault(p.PlayerId)).ToList();
+        List<PlayerQueueData> validPlayers;
+        lock (queue.Sync)
+        {
+            validPlayers = queue.Players
+                .Where(p => p.SquadId is null && queue.DoBackfilling.GetValueOrDefault(p.PlayerId)).ToList();
+        }
         if (validPlayers.Count == 0)
         {
             return (null, null);
@@ -377,8 +453,13 @@ public class Matchmaker(AsyncTaskTcpServer server)
             ? 0
             : MinimumMatchQuality;
         
-        var playersForQueue = Math.Min((queue.Players.Count >> 1) << 1, queue.GameModeCard.PlayersPerTeam * 2);
-        var players = queue.Players.ToList();
+        List<PlayerQueueData> players;
+        int playersForQueue;
+        lock (queue.Sync)
+        {
+            players = queue.Players.ToList();
+            playersForQueue = Math.Min((players.Count >> 1) << 1, queue.GameModeCard.PlayersPerTeam * 2);
+        }
         if (players.Count == 0) return null;
         
         var groupings = players.Where(p => p.SquadId is not null)
@@ -596,7 +677,10 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
     private void QueueCheck(QueueData queue)
     {
-        queue.Players = queue.Players.DistinctBy(p => p.PlayerId).ToList();
+        lock (queue.Sync)
+        {
+            queue.Players = queue.Players.DistinctBy(p => p.PlayerId).ToList();
+        }
         if (queue.IsPop is PopStatus.None)
         {
             ShowQueueMessage($"Attempting to create match for {queue.GameModeCard.Id}...");
@@ -656,7 +740,12 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
         if (!queue.EnoughForPop())
         {
-            ShowQueueMessage($"Not enough for pop. Only {queue.Players.Count} in queue.");
+            int playerCount;
+            lock (queue.Sync)
+            {
+                playerCount = queue.Players.Count;
+            }
+            ShowQueueMessage($"Not enough for pop. Only {playerCount} in queue.");
             return;
         }
         
@@ -716,9 +805,14 @@ public class Matchmaker(AsyncTaskTcpServer server)
                     });
                     await Task.Delay(AbortDelay);
                     RemovePlayer(player.PlayerId, serviceMatchmaker);
+                    int playerCount;
+                    lock (queue.Sync)
+                    {
+                        playerCount = queue.Players.Count;
+                    }
                     SendQueueUpdate(queue.PopServiceMatchmaker1, new MatchmakerUpdate
                     {
-                        PlayersInQueue = queue.Players.Count,
+                        PlayersInQueue = playerCount,
                         State = new MatchmakerState
                         {
                             State = MatchmakerStateType.InQueue
@@ -838,9 +932,17 @@ public class Matchmaker(AsyncTaskTcpServer server)
 
     public void OnPopAccepted(uint playerId, bool confirm, IServiceMatchmaker? serviceMatchmaker)
     {
-        foreach (var queue in _queues.Values.Where(x => x.Players.Any(p => p.PlayerId == playerId)).ToList())
+        foreach (var queue in _queues.Values.ToList())
         {
-            var player = queue.Players.First(p => p.PlayerId == playerId);
+            PlayerQueueData? player;
+            lock (queue.Sync)
+            {
+                player = queue.Players.FirstOrDefault(p => p.PlayerId == playerId);
+            }
+            if (player == null)
+            {
+                continue;
+            }
             switch (queue.IsPop)
             {
                 case PopStatus.Match:
@@ -894,13 +996,18 @@ public class Matchmaker(AsyncTaskTcpServer server)
                             }
                         });
                         Task.Delay(AbortDelay).Wait();
+                        int playerCount;
+                        lock (queue.Sync)
+                        {
+                            playerCount = queue.Players.Count;
+                        }
                         SendQueueUpdate(queue.PopServiceMatchmaker1, new MatchmakerUpdate
                         {
                             State = new MatchmakerState
                             {
                                 State = MatchmakerStateType.InQueue
                             },
-                            PlayersInQueue = queue.Players.Count
+                            PlayersInQueue = playerCount
                         });
                         queue.MatchSender1.UnsubscribeAll();
                         

@@ -61,6 +61,7 @@ public partial class GameZone : Updater
     private readonly List<Unit> _unitsToDrop = [];
 
     private DateTimeOffset? _attackStartTime;
+    private DateTimeOffset? _matchEndTime;
     
     private Task? _gameLoop;
     private Task? _tickChecker;
@@ -90,6 +91,17 @@ public partial class GameZone : Updater
     private uint NewSpawnId() => _newSpawnId++;
 
     public bool HasEnded => _zoneData.MatchEnded;
+
+    public float GetMatchElapsedSeconds()
+    {
+        if (!_attackStartTime.HasValue)
+        {
+            return 0f;
+        }
+
+        var endTime = _matchEndTime ?? DateTimeOffset.Now;
+        return (float)(endTime - _attackStartTime.Value).TotalSeconds;
+    }
 
     public GameZone(IServiceZone serviceZone, IServiceZone unbufferedZone, IBuffer sendBuffer, ISender sessionsSender,
         MapData mapData, IGameInitiator gameInitiator, ICollection<PlayerLobbyState> players, Key? mapKey = null)
@@ -1203,6 +1215,7 @@ public partial class GameZone : Updater
         {
             _gameInitiator.SetBackfillReady(false);
             _zoneData.EndMatch(winner);
+            _matchEndTime ??= DateTimeOffset.Now;
         });
 
         if (doWait)

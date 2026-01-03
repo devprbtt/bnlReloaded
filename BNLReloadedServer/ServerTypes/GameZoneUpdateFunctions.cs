@@ -4,6 +4,7 @@ using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using MatchType = BNLReloadedServer.BaseTypes.MatchType;
 
 namespace BNLReloadedServer.ServerTypes;
@@ -1535,6 +1536,97 @@ public partial class GameZone
                 Team2Stats = _zoneData.GetTeamScores(TeamType.Team2)
             }
         });
+    }
+
+    public Dictionary<uint, PlayerScoreSnapshot> GetPlayerScoreSnapshots()
+    {
+        var snapshots = new Dictionary<uint, PlayerScoreSnapshot>();
+        var statsLogic = _zoneData.MatchCard.Stats?.Stats;
+
+        var playerIds = new HashSet<uint>(_zoneData.PlayerStats.Keys);
+        foreach (var unit in _playerUnits.Values)
+        {
+            if (unit.PlayerId is not null)
+            {
+                playerIds.Add(unit.PlayerId.Value);
+            }
+        }
+
+        foreach (var playerId in playerIds)
+        {
+            var scoreMap = GetPlayerScoreMap(playerId);
+            var build = ComputeMatchStat(statsLogic, PlayerMatchStatType.Built, scoreMap);
+            var destroyed = ComputeMatchStat(statsLogic, PlayerMatchStatType.Destroyed, scoreMap);
+            var earned = ComputeMatchStat(statsLogic, PlayerMatchStatType.Earned, scoreMap);
+
+            var playerStats = _zoneData.PlayerStats.GetValueOrDefault(playerId);
+            snapshots[playerId] = new PlayerScoreSnapshot
+            {
+                Build = build,
+                Destroyed = destroyed,
+                Earned = earned,
+                Kills = playerStats?.Kills ?? 0,
+                Deaths = playerStats?.Deaths ?? 0,
+                Assists = playerStats?.Assists ?? 0
+            };
+        }
+
+        return snapshots;
+    }
+
+    public Dictionary<uint, TeamType?> GetPlayerTeams()
+    {
+        var teams = new Dictionary<uint, TeamType?>();
+        foreach (var (playerId, stats) in _zoneData.PlayerStats)
+        {
+            teams[playerId] = stats.Team;
+        }
+
+        return teams;
+    }
+
+    private Dictionary<ScoreType, float>? GetPlayerScoreMap(uint playerId)
+    {
+        if (_playerIdToUnitId.TryGetValue(playerId, out var unitId) &&
+            _playerUnits.TryGetValue(unitId, out var unit))
+        {
+            return unit.Stats;
+        }
+
+        return _playerUnits.Values.FirstOrDefault(u => u.PlayerId == playerId)?.Stats;
+    }
+
+    private static int ComputeMatchStat(
+        Dictionary<PlayerMatchStatType, Dictionary<ScoreType, float>>? statsLogic,
+        PlayerMatchStatType statType,
+        Dictionary<ScoreType, float>? stats)
+    {
+        if (stats is null)
+        {
+            return 0;
+        }
+
+        if (statsLogic != null && statsLogic.TryGetValue(statType, out var weights))
+        {
+            var weighted = weights.Sum(score => stats.GetValueOrDefault(score.Key) * score.Value);
+            return (int)weighted;
+        }
+
+        return statType switch
+        {
+            PlayerMatchStatType.Built => (int)(
+                stats.GetValueOrDefault(ScoreType.WorldBuiltResource) +
+                stats.GetValueOrDefault(ScoreType.BlocksBuiltResource) +
+                stats.GetValueOrDefault(ScoreType.DevicesBuiltResource) +
+                stats.GetValueOrDefault(ScoreType.HeroBlocksBuiltResource)),
+            PlayerMatchStatType.Destroyed => (int)(
+                stats.GetValueOrDefault(ScoreType.WorldDestroyedResource) +
+                stats.GetValueOrDefault(ScoreType.BlocksDestroyedResource) +
+                stats.GetValueOrDefault(ScoreType.DevicesDestroyedResource) +
+                stats.GetValueOrDefault(ScoreType.HeroBlocksDestroyedResource)),
+            PlayerMatchStatType.Earned => (int)stats.GetValueOrDefault(ScoreType.ResourceEarnedTotal),
+            _ => 0
+        };
     }
 
     private void UnitIsDamaged(Unit target, float damage, ImpactData impact)

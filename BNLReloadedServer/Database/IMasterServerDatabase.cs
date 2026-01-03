@@ -1,5 +1,6 @@
 ﻿using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Service;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 
 namespace BNLReloadedServer.Database;
@@ -10,6 +11,8 @@ public interface IMasterServerDatabase
     public bool AddRegionServer(string id, string host, RegionGuiInfo regionGuiInfo, IServiceMasterServer? serviceMasterServer = null);
     public bool RemoveRegionServer(string id);
     public RegionInfo? GetRegionServer(string id);
+    public void UpdateRegionStatus(string regionId, RegionStatusSnapshot snapshot);
+    public List<RegionStatusSnapshot> GetRegionStatusSnapshots();
     public Task<PlayerData> AddPlayer(ulong steamId, string playerName, string region);
     public Task<PlayerData?> GetPlayer(ulong steamId);
     public Task<PlayerData?> GetPlayer(uint playerId);

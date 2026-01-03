@@ -1,4 +1,5 @@
 ﻿using BNLReloadedServer.BaseTypes;
+using BNLReloadedServer.Status;
 
 namespace BNLReloadedServer.Service;
 
@@ -12,6 +13,7 @@ public interface IServiceRegionServer : IService
     public void SendBadges(uint playerId, Dictionary<BadgeType, List<Key>> badges);
     public void SendMatchEndedForPlayer(EndMatchResults endMatchResults);
     public void SendRegionInfo(string host, RegionGuiInfo regionGuiInfo);
+    public void SendRegionStatus(RegionStatusSnapshot snapshot);
     public Task<List<string>?> SendRegionRequest();
     public void SendUpdateRatings(List<uint> winners, List<uint> losers, HashSet<uint> excluded);
     public void SendLookingForFriends(uint playerId, bool lookingForFriends);

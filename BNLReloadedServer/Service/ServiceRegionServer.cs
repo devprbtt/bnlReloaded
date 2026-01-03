@@ -1,8 +1,10 @@
 ﻿using System.Collections.Concurrent;
+using System.Text.Json;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.ProtocolHelpers;
 using BNLReloadedServer.Servers;
+using BNLReloadedServer.Status;
 using Moserware.Skills;
 
 namespace BNLReloadedServer.Service;
@@ -32,7 +34,8 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         MessageFriendRequest = 18,
         MessageFriendSearch = 19,
         MessageFriendSearchSteam = 20,
-        MessageGetLeaderboard = 21
+        MessageGetLeaderboard = 21,
+        MessageRegionStatus = 22
     }
 
     private ushort _currRpcId = 1;
@@ -210,6 +213,15 @@ public class ServiceRegionServer(ISender sender) : IServiceRegionServer
         writer.Write((byte) ServiceRegionId.MessageRegion);
         writer.Write(host);
         RegionGuiInfo.WriteRecord(writer, regionGuiInfo);
+        sender.Send(writer);
+    }
+
+    public void SendRegionStatus(RegionStatusSnapshot snapshot)
+    {
+        using var writer = CreateWriter();
+        writer.Write((byte) ServiceRegionId.MessageRegionStatus);
+        var json = JsonSerializer.Serialize(snapshot, JsonHelper.DefaultSerializerSettings);
+        writer.Write(json);
         sender.Send(writer);
     }
 

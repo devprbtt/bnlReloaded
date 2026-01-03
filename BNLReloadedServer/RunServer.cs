@@ -123,6 +123,7 @@ if (toJson || fromJson)
 if (runServer)
 {
     MasterServer? server = null;
+    MasterStatusHttpServer? statusServer = null;
     if (masterMode)
     {
         // Create a new TCP server
@@ -132,6 +133,13 @@ if (runServer)
         
         // Start the server
         server.Start();
+
+        var statusPort = configs.StatusHttpPort();
+        if (statusPort > 0)
+        {
+            statusServer = new MasterStatusHttpServer(statusPort);
+            statusServer.Start();
+        }
     }
 
     var regionServer = new RegionServer(configs.RegionIp(), 28101);
@@ -202,6 +210,7 @@ if (runServer)
         // Stop the server
         Console.Write("Server stopping...");
         server?.Stop();
+        statusServer?.StopAsync().GetAwaiter().GetResult();
         regionServer.Stop();
         regionClient.DisconnectAndStop();
         if (configs.IsMaster())
