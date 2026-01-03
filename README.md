@@ -14,7 +14,7 @@ The dll changes will be permanent unless you verify the integrity of the game fi
 To use the cdb serializer/deserializer, create a folder called Cache in the base directory (should be in the same directory as the BaseTypes, Database, etc. folders). Put the cdb file from the game assets into the new Cache folder. Then change the toJson and fromJson constants to serialize/deserialize the cdb to a json file/zipped cdb file respectively.
 
 # Master HTTP status service
-This repo now includes a master HTTP status endpoint that aggregates data from all connected region servers (and the master itself): online players, ranked/casual queues, custom lobbies, and live match snapshots with player heroes, team, and scoreboard stats.
+This repo now includes a master HTTP status endpoint that aggregates data from all connected region servers (and the master itself): online players, ranked/casual queues, custom lobbies, and live match snapshots with player heroes, team, scoreboard stats, and cube status (per-team totals plus per-cube HP).
 
 ## How to use
 1. Ensure `BNLReloadedServer/Configs/configs.json` exists.
@@ -30,13 +30,13 @@ This repo now includes a master HTTP status endpoint that aggregates data from a
 - `BNLReloadedServer/Database/ConfigDatabase.cs`: reads `status_http_port`.
 - `BNLReloadedServer/Database/IConfigDatabase.cs`: interface update for `StatusHttpPort()`.
 - `BNLReloadedServer/Database/DummyConfigDatabase.cs`: adds `StatusHttpPort()` for tests.
-- `BNLReloadedServer/Status/StatusSnapshots.cs`: status DTOs for online/queue/lobby/match snapshots.
-- `BNLReloadedServer/Database/GameInstance.cs`: builds per-match snapshots (hero, team, stats, elapsed time).
+- `BNLReloadedServer/Status/StatusSnapshots.cs`: status DTOs for online/queue/lobby/match snapshots, including `cube_status` with per-team/per-cube health.
+- `BNLReloadedServer/Database/GameInstance.cs`: builds per-match snapshots (hero, team, stats, elapsed time, cube status).
 - `BNLReloadedServer/ServerTypes/GameZone.cs`: tracks match elapsed time and freezes it on match end.
-- `BNLReloadedServer/ServerTypes/GameZoneUpdateFunctions.cs`: builds scoreboard stats per player (build/destroyed/earned/k/d/a) and team lookup.
+- `BNLReloadedServer/ServerTypes/GameZoneUpdateFunctions.cs`: builds scoreboard stats per player (build/destroyed/earned/k/d/a), team lookup, and cube status/health.
 - `BNLReloadedServer/ServerTypes/GameLobby.cs`: exposes lobby player snapshot list.
 - `BNLReloadedServer/ServerTypes/Matchmaker.cs`: exposes queue snapshots safely.
-- `BNLReloadedServer/Database/RegionServerDatabase.cs`: builds region snapshots (online/queues/custom lobbies/matches).
+- `BNLReloadedServer/Database/RegionServerDatabase.cs`: builds region snapshots (online/queues/custom lobbies/matches) and includes cube status on matches/lobbies.
 - `BNLReloadedServer/Database/IRegionServerDatabase.cs`: interface update for `BuildStatusSnapshot()`.
 - `BNLReloadedServer/Database/MasterServerDatabase.cs`: stores latest per-region snapshots.
 - `BNLReloadedServer/Database/IMasterServerDatabase.cs`: interface update for region status snapshot methods.

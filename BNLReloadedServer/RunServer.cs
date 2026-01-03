@@ -13,6 +13,111 @@ var runServer = configs.DoRunServer();
 
 const int bufferSize = 2000000;  // 2MB
 
+List<Card>? LoadJsonCatalogue(string jsonPath)
+{
+    if (!File.Exists(jsonPath))
+    {
+        return null;
+    }
+
+    using var fs = new StreamReader(File.OpenRead(jsonPath));
+    var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
+    if (deserializedCards is null)
+    {
+        return null;
+    }
+
+    deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
+    
+    // Add maps
+    foreach (var map in Databases.MapDatabase.GetMapCards())
+    {
+        var exists = false;
+        foreach (var (_, idx) in deserializedCards.Select((x, idx) => (x, idx))
+                     .Where(x => x.x is CardMap && x.x.Id == map.Id).ToList())
+        {
+            exists = true;
+            deserializedCards[idx] = map;
+        }
+
+        if (!exists)
+        {
+            deserializedCards.Add(map);
+        }
+    }
+
+    if (Databases.MapDatabase.GrabExtraMaps() is { } extraMaps)
+    {
+        foreach (var mapList in deserializedCards.OfType<CardMapList>())
+        {
+            if (extraMaps.Custom is { Count: > 0 })
+            {
+                if (mapList.Custom is not null)
+                {
+                    mapList.Custom.AddRange(extraMaps.Custom);
+                }
+                else
+                {
+                    mapList.Custom = extraMaps.Custom;
+                }
+            }
+
+            if (extraMaps.Friendly is { Count: > 0 })
+            {
+                if (mapList.Friendly is not null)
+                {
+                    mapList.Friendly.AddRange(extraMaps.Friendly);
+                }
+                else
+                {
+                    mapList.Friendly = extraMaps.Friendly;
+                }
+            }
+
+            if (extraMaps.FriendlyNoob is { Count: > 0 })
+            {
+                if (mapList.FriendlyNoob is not null)
+                {
+                    mapList.FriendlyNoob.AddRange(extraMaps.FriendlyNoob);
+                }
+                else
+                {
+                    mapList.FriendlyNoob = extraMaps.FriendlyNoob;
+                }
+            }
+
+            if (extraMaps.Ranked is { Count: > 0 })
+            {
+                if (mapList.Ranked is not null)
+                {
+                    mapList.Ranked.AddRange(extraMaps.Ranked);
+                }
+                else
+                {
+                    mapList.Ranked = extraMaps.Ranked;
+                }
+            }
+        }
+    }
+    
+    foreach (var t in deserializedCards)
+    {
+        t.Key = Catalogue.Key(t.Id ?? string.Empty);
+    }
+
+    return deserializedCards;
+}
+
+byte[] BuildCdbBytes(ICollection<Card> cards)
+{
+    var memStream = new MemoryStream();
+    var writer = new BinaryWriter(memStream);
+    writer.Write((byte)0);
+    writer.WriteList(cards, Card.WriteVariant);
+    using var zipped = memStream.GetBuffer().Zip(0);
+    return zipped.ToArray();
+}
+
 if (toJson || fromJson)
 {
     var serializedPath = Path.Combine(Databases.CacheFolderPath, configs.FromJsonCdbName());
@@ -26,96 +131,10 @@ if (toJson || fromJson)
     }
     if (fromJson)
     {
-        using var fs = new StreamReader(File.OpenRead(serializedPath));
-        var deserializedCards = JsonSerializer.Deserialize<List<Card>>(fs.ReadToEnd(), JsonHelper.DefaultSerializerSettings);
+        var deserializedCards = LoadJsonCatalogue(serializedPath);
         if (deserializedCards is not null)
         {
-            deserializedCards.RemoveAll(c => c is CardMap or CardMapData);
-            
-            // Add maps
-            foreach (var map in Databases.MapDatabase.GetMapCards())
-            {
-                var exists = false;
-                foreach (var (_, idx) in deserializedCards.Select((x, idx) => (x, idx))
-                             .Where(x => x.x is CardMap && x.x.Id == map.Id).ToList())
-                {
-                    exists = true;
-                    deserializedCards[idx] = map;
-                }
-
-                if (!exists)
-                {
-                    deserializedCards.Add(map);
-                }
-            }
-
-            if (Databases.MapDatabase.GrabExtraMaps() is { } extraMaps)
-            {
-                foreach (var mapList in deserializedCards.OfType<CardMapList>())
-                {
-                    if (extraMaps.Custom is { Count: > 0 })
-                    {
-                        if (mapList.Custom is not null)
-                        {
-                            mapList.Custom.AddRange(extraMaps.Custom);
-                        }
-                        else
-                        {
-                            mapList.Custom = extraMaps.Custom;
-                        }
-                    }
-
-                    if (extraMaps.Friendly is { Count: > 0 })
-                    {
-                        if (mapList.Friendly is not null)
-                        {
-                            mapList.Friendly.AddRange(extraMaps.Friendly);
-                        }
-                        else
-                        {
-                            mapList.Friendly = extraMaps.Friendly;
-                        }
-                    }
-
-                    if (extraMaps.FriendlyNoob is { Count: > 0 })
-                    {
-                        if (mapList.FriendlyNoob is not null)
-                        {
-                            mapList.FriendlyNoob.AddRange(extraMaps.FriendlyNoob);
-                        }
-                        else
-                        {
-                            mapList.FriendlyNoob = extraMaps.FriendlyNoob;
-                        }
-                    }
-
-                    if (extraMaps.Ranked is { Count: > 0 })
-                    {
-                        if (mapList.Ranked is not null)
-                        {
-                            mapList.Ranked.AddRange(extraMaps.Ranked);
-                        }
-                        else
-                        {
-                            mapList.Ranked = extraMaps.Ranked;
-                        }
-                    }
-                }
-            }
-            
-            foreach (var t in deserializedCards)
-            {
-                t.Key = Catalogue.Key(t.Id ?? string.Empty);
-            }
-
-            var memStream = new MemoryStream();
-            var writer = new BinaryWriter(memStream);
-            using var fs2 = File.Create(deserializedPath);
-            writer.Write((byte)0);
-            writer.WriteList(deserializedCards, Card.WriteVariant);
-            var zipped = (writer.BaseStream as MemoryStream)?.GetBuffer().Zip(0);
-            zipped?.CopyTo(fs2);
-            zipped?.Close();
+            File.WriteAllBytes(deserializedPath, BuildCdbBytes(deserializedCards));
         }
     }
 }
@@ -160,6 +179,60 @@ if (runServer)
     regionClient.ConnectAsync();
     matchServer.Start();
     
+    FileSystemWatcher? jsonWatcher = null;
+    Timer? jsonReloadTimer = null;
+    string? jsonPath = null;
+
+    if (toJson)
+    {
+        jsonPath = Path.Combine(Databases.CacheFolderPath, configs.ToJsonCdbName());
+    }
+    else if (fromJson)
+    {
+        jsonPath = Path.Combine(Databases.CacheFolderPath, configs.FromJsonCdbName());
+    }
+
+    if (!string.IsNullOrWhiteSpace(jsonPath))
+    {
+        void ApplyCatalogueFromJson()
+        {
+            if (Databases.Catalogue is not ServerCatalogue serverCatalogue) return;
+
+            List<Card>? cards = null;
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    cards = LoadJsonCatalogue(jsonPath);
+                    break;
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(200);
+                }
+            }
+
+            if (cards is null) return;
+
+            CatalogueCache.Save(BuildCdbBytes(cards));
+            serverCatalogue.Replicate(cards);
+            var catalogueReplicator = new ServiceCatalogue(new ServerSender(regionServer));
+            catalogueReplicator.SendReplicate(cards);
+            Console.WriteLine($"Applied JSON catalogue changes from {jsonPath}");
+        }
+
+        jsonReloadTimer = new Timer(_ => ApplyCatalogueFromJson(), null, Timeout.Infinite, Timeout.Infinite);
+        jsonWatcher = new FileSystemWatcher(Path.GetDirectoryName(jsonPath)!, Path.GetFileName(jsonPath))
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName
+        };
+        FileSystemEventHandler onChange = (_, _) => jsonReloadTimer.Change(500, Timeout.Infinite);
+        jsonWatcher.Changed += onChange;
+        jsonWatcher.Created += onChange;
+        jsonWatcher.Renamed += (_, _) => jsonReloadTimer.Change(500, Timeout.Infinite);
+        jsonWatcher.EnableRaisingEvents = true;
+    }
+
     Console.WriteLine("Press Enter to stop the server or '!' to restart the server...");
     try 
     {
@@ -209,6 +282,8 @@ if (runServer)
     {
         // Stop the server
         Console.Write("Server stopping...");
+        jsonWatcher?.Dispose();
+        jsonReloadTimer?.Dispose();
         server?.Stop();
         statusServer?.StopAsync().GetAwaiter().GetResult();
         regionServer.Stop();

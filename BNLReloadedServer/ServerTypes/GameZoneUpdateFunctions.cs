@@ -1585,6 +1585,115 @@ public partial class GameZone
         return teams;
     }
 
+    public CubeStatusSnapshot? GetCubeStatusSnapshot()
+    {
+        var cubeLabels = new HashSet<UnitLabel> { UnitLabel.Line1, UnitLabel.Line2, UnitLabel.Line3, UnitLabel.LineBase };
+        var mapCubes = new List<(TeamType team, UnitLabel label, Key unitKey, float totalHealth)>();
+
+        foreach (var mapUnit in _zoneData.MapData.Units)
+        {
+            var unitCard = Databases.Catalogue.GetCard<CardUnit>(mapUnit.UnitKey);
+            if (unitCard?.Labels == null || !unitCard.Labels.Any(label => cubeLabels.Contains(label)))
+            {
+                continue;
+            }
+
+            var label = unitCard.Labels.First(label => cubeLabels.Contains(label));
+            mapCubes.Add((mapUnit.Team, label, mapUnit.UnitKey, unitCard.Health?.Health?.MaxHealth ?? 0f));
+        }
+
+        var liveCubes = _units.Values
+            .Where(unit => unit.UnitCard?.Labels?.Any(label => cubeLabels.Contains(label)) is true)
+            .ToList();
+        if (mapCubes.Count == 0 && liveCubes.Count == 0)
+        {
+            return null;
+        }
+
+        if (mapCubes.Count == 0)
+        {
+            foreach (var unit in liveCubes)
+            {
+                var unitCard = unit.UnitCard;
+                if (unitCard?.Labels == null || !unitCard.Labels.Any(label => cubeLabels.Contains(label)))
+                {
+                    continue;
+                }
+
+                var label = unitCard.Labels.First(label => cubeLabels.Contains(label));
+                var totalHealth = unitCard.Health?.Health is { } health
+                    ? unit.UnitMaxHealth(health.MaxHealth)
+                    : unitCard.Health?.Health?.MaxHealth ?? 0f;
+                mapCubes.Add((unit.Team, label, unit.Key, totalHealth));
+            }
+        }
+
+        var teams = mapCubes.Select(cube => cube.team).Distinct().OrderBy(team => team).ToList();
+        var teamSnapshots = new List<CubeTeamStatusSnapshot>();
+        var usedUnits = new HashSet<uint>();
+
+        foreach (var team in teams)
+        {
+            var cubeEntries = new List<CubeHealthSnapshot>();
+            var teamTotalCubes = 0;
+            var teamDestroyedCubes = 0;
+            var teamCurrentHealth = 0f;
+            var teamTotalHealth = 0f;
+
+            foreach (var cube in mapCubes.Where(cube => cube.team == team))
+            {
+                teamTotalCubes += 1;
+                var totalHealth = cube.totalHealth;
+                var currentHealth = 0f;
+                var matched = liveCubes.FirstOrDefault(unit =>
+                    !usedUnits.Contains(unit.Id) &&
+                    unit.Team == team &&
+                    unit.Key == cube.unitKey &&
+                    unit.UnitCard?.Labels?.Contains(cube.label) is true);
+
+                if (matched is not null && !matched.IsDead)
+                {
+                    usedUnits.Add(matched.Id);
+                    if (matched.UnitCard?.Health?.Health is { } health)
+                    {
+                        var maxHealth = matched.UnitMaxHealth(health.MaxHealth);
+                        totalHealth = maxHealth;
+                        currentHealth = matched.HealthPercentage * maxHealth;
+                    }
+                }
+                else
+                {
+                    teamDestroyedCubes += 1;
+                }
+
+                teamTotalHealth += totalHealth;
+                teamCurrentHealth += currentHealth;
+                cubeEntries.Add(new CubeHealthSnapshot
+                {
+                    Label = cube.label,
+                    CurrentHealth = currentHealth,
+                    TotalHealth = totalHealth,
+                    IsDestroyed = matched is null || matched.IsDead
+                });
+            }
+
+            teamSnapshots.Add(new CubeTeamStatusSnapshot
+            {
+                Team = team,
+                TotalCubes = teamTotalCubes,
+                DestroyedCubes = teamDestroyedCubes,
+                CurrentHealth = teamCurrentHealth,
+                TotalHealth = teamTotalHealth,
+                Cubes = cubeEntries
+            });
+        }
+
+        return new CubeStatusSnapshot
+        {
+            Teams = teamSnapshots
+        };
+    }
+
     private Dictionary<ScoreType, float>? GetPlayerScoreMap(uint playerId)
     {
         if (_playerIdToUnitId.TryGetValue(playerId, out var unitId) &&

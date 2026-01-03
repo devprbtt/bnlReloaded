@@ -414,6 +414,7 @@ public class GameInstance : IGameInstance
             HasEnded = hasEnded,
             Status = status,
             MatchElapsedSeconds = Zone?.GetMatchElapsedSeconds() ?? 0f,
+            CubeStatus = Zone?.GetCubeStatusSnapshot(),
             Players = playerSnapshots.Values.ToList()
         };
     }

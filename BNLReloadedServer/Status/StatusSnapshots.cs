@@ -28,6 +28,29 @@ public record QueueSnapshot
     public List<PlayerSnapshot> Players { get; init; } = [];
 }
 
+public record CubeTeamStatusSnapshot
+{
+    public TeamType Team { get; init; }
+    public int TotalCubes { get; init; }
+    public int DestroyedCubes { get; init; }
+    public float CurrentHealth { get; init; }
+    public float TotalHealth { get; init; }
+    public List<CubeHealthSnapshot> Cubes { get; init; } = [];
+}
+
+public record CubeStatusSnapshot
+{
+    public List<CubeTeamStatusSnapshot> Teams { get; init; } = [];
+}
+
+public record CubeHealthSnapshot
+{
+    public UnitLabel Label { get; init; }
+    public float CurrentHealth { get; init; }
+    public float TotalHealth { get; init; }
+    public bool IsDestroyed { get; init; }
+}
+
 public record OnlineSnapshot
 {
     public int Count { get; init; }
@@ -44,6 +67,7 @@ public record LobbySnapshot
     public string Status { get; init; } = string.Empty;
     public bool HasStarted { get; init; }
     public float MatchElapsedSeconds { get; init; }
+    public CubeStatusSnapshot? CubeStatus { get; init; }
     public List<PlayerSnapshot> Players { get; init; } = [];
 }
 
@@ -54,6 +78,7 @@ public record MatchSnapshot
     public string Status { get; init; } = string.Empty;
     public bool HasStarted { get; init; }
     public float MatchElapsedSeconds { get; init; }
+    public CubeStatusSnapshot? CubeStatus { get; init; }
     public List<PlayerSnapshot> Players { get; init; } = [];
 }
 
@@ -68,6 +93,7 @@ public record GameInstanceSnapshot
     public bool HasEnded { get; init; }
     public string Status { get; init; } = string.Empty;
     public float MatchElapsedSeconds { get; init; }
+    public CubeStatusSnapshot? CubeStatus { get; init; }
     public List<PlayerSnapshot> Players { get; init; } = [];
 }
 

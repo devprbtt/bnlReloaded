@@ -1116,12 +1116,14 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     .OrderBy(player => player.Name)
                     .ToList();
                 var elapsedSeconds = 0f;
+                CubeStatusSnapshot? cubeStatus = null;
 
                 if (custom.GameInstanceId is not null &&
                     _gameInstances.TryGetValue(custom.GameInstanceId, out var instance))
                 {
                     var instanceSnapshot = instance.GetStatusSnapshot();
                     elapsedSeconds = instanceSnapshot.MatchElapsedSeconds;
+                    cubeStatus = instanceSnapshot.CubeStatus;
                     if (instanceSnapshot.Players.Count > 0)
                     {
                         players = instanceSnapshot.Players;
@@ -1138,6 +1140,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
                     Status = status,
                     HasStarted = hasStarted,
                     MatchElapsedSeconds = elapsedSeconds,
+                    CubeStatus = cubeStatus,
                     Players = players
                 });
             }
@@ -1179,6 +1182,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
             Status = snapshot.Status,
             HasStarted = snapshot.HasStarted,
             MatchElapsedSeconds = snapshot.MatchElapsedSeconds,
+            CubeStatus = snapshot.CubeStatus,
             Players = snapshot.Players
         };
     }
