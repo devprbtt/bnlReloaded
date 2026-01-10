@@ -45,6 +45,8 @@ public partial class GameZone : Updater
 
     private readonly HashSet<ConstEffectInfo>[]
         _teamEffects = new HashSet<ConstEffectInfo>[Enum.GetValues<TeamType>().Length];
+    private bool _buildPhaseDamageBuffActive;
+    private static readonly Key BuildPhaseDamageEffectKey = new("effect_build_phase_damage_boost");
     
     private readonly Dictionary<uint, MapSpawnPoint> _mapSpawnPoints = new();
     private readonly Dictionary<uint, Unit> _playerSpawnPoints = new();
@@ -731,6 +733,7 @@ public partial class GameZone : Updater
         
         _zoneData.UpdateData(phaseUpdate);
         _serviceZone.SendUpdateBarriers(GetBarriersForPhase(nextPhase));
+        UpdateBuildPhaseDamageBuff(nextPhase is ZonePhaseType.Build or ZonePhaseType.Build2);
         if (currentPhase is not (ZonePhaseType.Waiting or ZonePhaseType.TutorialInit)) return;
         
         var initMatchStats = new MatchStats
@@ -804,6 +807,29 @@ public partial class GameZone : Updater
         _gameLoop = RunGameLoop();
         _tickChecker = RunTickCheck();
         _gameInitiator.SetBackfillReady(_zoneData.GameModeCard.Ranking is GameRankingType.Friendly);
+    }
+
+    private void UpdateBuildPhaseDamageBuff(bool active)
+    {
+        if (_buildPhaseDamageBuffActive == active) return;
+        _buildPhaseDamageBuffActive = active;
+        foreach (var playerUnit in _playerUnits.Values.Where(u => u.PlayerId is not null))
+        {
+            ApplyBuildPhaseDamageEffect(playerUnit, active);
+        }
+    }
+
+    private void ApplyBuildPhaseDamageEffect(Unit unit, bool apply)
+    {
+        var effectInfo = new ConstEffectInfo(BuildPhaseDamageEffectKey);
+        if (apply)
+        {
+            unit.AddEffects(new[] { effectInfo }, unit.Team, null);
+        }
+        else
+        {
+            unit.RemoveEffects(new[] { effectInfo }, unit.Team, null);
+        }
     }
 
     private void IncreaseSpawnTime(Timer? timer = null)
@@ -1468,6 +1494,12 @@ public partial class GameZone : Updater
         var worldDmg = damage is { Mining: true }
             ? source?.ToolWorldDamageAmount(damage.WorldDamage) ?? damage.WorldDamage
             : source?.WorldDamageAmount(damage.WorldDamage) ?? damage.WorldDamage;
+
+        if (worldDmg > 0 &&
+            (_zoneData.Phase.PhaseType is ZonePhaseType.Build or ZonePhaseType.Build2))
+        {
+            worldDmg *= 1.33f;
+        }
         
         var objDmg = source?.ObjectiveDamageAmount(damage.ObjectiveDamage) ?? damage.ObjectiveDamage;
 

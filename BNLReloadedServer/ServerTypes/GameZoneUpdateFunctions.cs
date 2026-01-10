@@ -19,6 +19,10 @@ public partial class GameZone
             {
                 _playerUnits.Add(unit.Id, unit);
                 _playerIdToUnitId.Add(unitInit.PlayerId.Value, unit.Id);
+                if (_buildPhaseDamageBuffActive)
+                {
+                    ApplyBuildPhaseDamageEffect(unit, true);
+                }
             }
         }
 
