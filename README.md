@@ -13,6 +13,10 @@ The dll changes will be permanent unless you verify the integrity of the game fi
 
 To use the cdb serializer/deserializer, create a folder called Cache in the base directory (should be in the same directory as the BaseTypes, Database, etc. folders). Put the cdb file from the game assets into the new Cache folder. Then change the toJson and fromJson constants to serialize/deserialize the cdb to a json file/zipped cdb file respectively.
 
+## Build phase damage boost
+- `BNLReloadedServer/ServerTypes/GameZone.cs` multiplies world damage by 33% during both build phases and deploys the new `effect_build_phase_damage_boost` onto every player so the `gameplayeffects_buildspeed` icon appears for the temporary buff.
+- `BNLReloadedServer/Cache/cdb.json` now defines `effect_build_phase_damage_boost` so the client can render the icon and tooltip describing the build-phase bonus.
+
 # Master HTTP status service
 This repo now includes a master HTTP status endpoint that aggregates data from all connected region servers (and the master itself): online players, ranked/casual queues, custom lobbies, and live match snapshots with player heroes, team, scoreboard stats, and cube status (per-team totals plus per-cube HP).
 
