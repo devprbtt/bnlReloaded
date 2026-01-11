@@ -374,13 +374,24 @@ public partial class GameZone : Updater
         if (_zoneData.MatchCard.SupplyLogic is not { } supplyLogic) return;
         var spawnPoint = position with { Y = position.Y + supplyLogic.SpawnHeight };
         var transform = ZoneTransformHelper.ToZoneTransform(spawnPoint, Quaternion.Identity);
+        var indicatorTransform = ZoneTransformHelper.ToZoneTransform(position, Quaternion.Identity);
 
         if (_gameInitiator.IsSuperSupplies() && supplyKey == CatalogueHelper.SupplyDrop)
         {
             supplyKey = CatalogueHelper.SuperSupplyDrop;
         }
         
-        CatalogueFactory.CreateUnit(NewUnitId(), supplyKey, transform, TeamType.Neutral, null, _defaultUnitUpdater);
+        var supplyUnit = CatalogueFactory.CreateUnit(NewUnitId(), supplyKey, transform, TeamType.Neutral, null, _defaultUnitUpdater);
+        var indicatorUnit = CatalogueFactory.CreateUnit(NewUnitId(), CatalogueHelper.AsterellaBeaconIndicator,
+            indicatorTransform, TeamType.Neutral, null, _defaultUnitUpdater);
+        if (supplyUnit == null || indicatorUnit == null) return;
+
+        var existingOnDestroyed = supplyUnit.OnDestroyed;
+        supplyUnit.OnDestroyed = () =>
+        {
+            indicatorUnit.Killed(indicatorUnit.CreateBlankImpactData());
+            existingOnDestroyed?.Invoke();
+        };
     }
 
     private Vector3 GetSpawnPosition(Vector3 spawnPoint, float spawnRadius)
