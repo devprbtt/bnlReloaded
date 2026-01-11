@@ -81,6 +81,7 @@ public static class CatalogueHelper
     public static Key FallImpact { get; } = new("impact_falling");
     public static Key SupplyDrop { get; } = new("unit_supply_resource");
     public static Key SuperSupplyDrop { get; } = new("unit_supply_super_resource");
+    public static Key AsterellaBeaconIndicator { get; } = new("unit_indicator_asterella_beacon");
     public static Key ClassicBlockbuster { get; } = new("unit_supply_blockbuster_classic");
     public static Key SpecialBadge { get; } = new("badge_icon_community_representative");
     public static Key AntimatterShieldImpact { get; } = new("impact_antimatter_shield");
