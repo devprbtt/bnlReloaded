@@ -17,6 +17,11 @@ To use the cdb serializer/deserializer, create a folder called Cache in the base
 - `BNLReloadedServer/ServerTypes/GameZone.cs` multiplies world damage by 33% during both build phases and deploys the new `effect_build_phase_damage_boost` onto every player so the `gameplayeffects_buildspeed` icon appears for the temporary buff.
 - `BNLReloadedServer/Cache/cdb.json` now defines `effect_build_phase_damage_boost` so the client can render the icon and tooltip describing the build-phase bonus.
 
+## Custom game tweaks
+- `BNLReloadedServer/Cache/cdb.json` allows `min_build_time` of `0` and `min_respawn_time_mod` of `-1` so custom games can be configured for 0s build time and 0s respawn time.
+- `BNLReloadedServer/ServerTypes/GameZone.cs` skips zero-length build timers and immediately advances phases to avoid invalid timer intervals.
+- `BNLReloadedServer/Cache/cdb.json` adds a hit sound for Tony's caulk gun slow via the new `impact_engineer_caulk_gun_slow` impact entry.
+
 # Master HTTP status service
 This repo now includes a master HTTP status endpoint that aggregates data from all connected region servers (and the master itself): online players, ranked/casual queues, custom lobbies, and live match snapshots with player heroes, team, scoreboard stats, and cube status (per-team totals plus per-cube HP).
 

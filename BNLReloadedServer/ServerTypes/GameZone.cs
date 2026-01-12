@@ -656,6 +656,7 @@ public partial class GameZone : Updater
         ZonePhaseType nextPhase;
         var startTime = DateTimeOffset.Now;
         long? endTime = null;
+        var advanceImmediately = false;
 
         switch (currentPhase)
         {
@@ -679,12 +680,22 @@ public partial class GameZone : Updater
                 
                 if (endTime != null)
                 {
-                    _build1Timer = new Timer(TimeSpan.FromMilliseconds(endTime.Value - startTime.ToUnixTimeMilliseconds()));
-                    _build1Timer.AutoReset = false;
-                    _build1Timer.Elapsed += OnBuild1TimerElapsed;
-                    _build1Timer.Start();
-                    _build1EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
-                    _build1Remaining = null;
+                    var remainingMs = endTime.Value - startTime.ToUnixTimeMilliseconds();
+                    if (remainingMs > 0)
+                    {
+                        _build1Timer = new Timer(TimeSpan.FromMilliseconds(remainingMs));
+                        _build1Timer.AutoReset = false;
+                        _build1Timer.Elapsed += OnBuild1TimerElapsed;
+                        _build1Timer.Start();
+                        _build1EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                        _build1Remaining = null;
+                    }
+                    else
+                    {
+                        _build1EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                        _build1Remaining = null;
+                        advanceImmediately = true;
+                    }
                 }
                 break;
             }
@@ -761,12 +772,22 @@ public partial class GameZone : Updater
 
                 if (endTime != null)
                 {
-                    _build2Timer = new Timer(TimeSpan.FromMilliseconds(endTime.Value - startTime.ToUnixTimeMilliseconds()));
-                    _build2Timer.AutoReset = false;
-                    _build2Timer.Elapsed += OnBuild2TimerElapsed;
-                    _build2Timer.Start();
-                    _build2EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
-                    _build2Remaining = null;
+                    var remainingMs = endTime.Value - startTime.ToUnixTimeMilliseconds();
+                    if (remainingMs > 0)
+                    {
+                        _build2Timer = new Timer(TimeSpan.FromMilliseconds(remainingMs));
+                        _build2Timer.AutoReset = false;
+                        _build2Timer.Elapsed += OnBuild2TimerElapsed;
+                        _build2Timer.Start();
+                        _build2EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                        _build2Remaining = null;
+                    }
+                    else
+                    {
+                        _build2EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                        _build2Remaining = null;
+                        advanceImmediately = true;
+                    }
                 }
                 break;
             case ZonePhaseType.Build2:
@@ -810,6 +831,8 @@ public partial class GameZone : Updater
         _zoneData.UpdateData(phaseUpdate);
         _serviceZone.SendUpdateBarriers(GetBarriersForPhase(nextPhase));
         UpdateBuildPhaseDamageBuff(nextPhase is ZonePhaseType.Build or ZonePhaseType.Build2);
+        if (advanceImmediately)
+            EnqueueAction(UpdatePhase);
         if (currentPhase is not (ZonePhaseType.Waiting or ZonePhaseType.TutorialInit)) return;
         
         var initMatchStats = new MatchStats
