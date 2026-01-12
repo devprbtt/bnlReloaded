@@ -422,19 +422,6 @@ public class GameInstance : IGameInstance
 
     public bool NeedsBackfill() => GameInitiator.NeedsBackfill();
 
-    public bool IsMatchPaused() => Zone?.IsPaused ?? false;
-
-    public bool SetMatchPaused(bool paused)
-    {
-        if (Zone == null)
-        {
-            return false;
-        }
-
-        Zone.EnqueueAction(() => Zone.SetPaused(paused));
-        return true;
-    }
-
     public (Dictionary<uint, Rating> team1, Dictionary<uint, Rating> team2) GetTeamRatings() =>
         GameInitiator.GetTeamRatings();
 

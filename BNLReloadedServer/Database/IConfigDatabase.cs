@@ -18,8 +18,6 @@ public interface IConfigDatabase
     public IPAddress RegionIp();
     public IPAddress RegionPublicIp();
     public int StatusHttpPort();
-    public string? StatusHttpUsername();
-    public string? StatusHttpPassword();
     public RegionGuiInfo GetRegionInfo();
     public string ToJsonCdbName();
     public string FromJsonCdbName();

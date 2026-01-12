@@ -10,8 +10,6 @@
   "region_name": "Local",
   "region_icon": "server_namericaeast",
   "status_http_port": 8888,
-  "status_http_username": "admin",
-  "status_http_password": "admin",
   "to_json": false,
   "to_json_name": "cdb.json",
   "from_json": true,

@@ -771,17 +771,6 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         return instance;
     }
 
-    public IGameInstance? GetGameInstanceById(string gameInstanceId)
-    {
-        if (string.IsNullOrWhiteSpace(gameInstanceId))
-        {
-            return null;
-        }
-
-        _gameInstances.TryGetValue(gameInstanceId, out var instance);
-        return instance;
-    }
-
     public bool RemoveGameInstance(string gameInstanceId)
     {
         foreach (var playerId in _connectedUsers.Keys)
