@@ -1,7 +1,7 @@
 {
   "is_master": true,
   "run_server": true,
-  "use_master_cdb": false,
+  "use_master_cdb": true,
   "cdb_name": "cdb",
   "master_host": "192.168.192.45",
   "master_public_host": "192.168.192.45",
@@ -10,6 +10,8 @@
   "region_name": "Local",
   "region_icon": "server_namericaeast",
   "status_http_port": 8888,
+  "status_http_username": "admin",
+  "status_http_password": "admin",
   "to_json": false,
   "to_json_name": "cdb.json",
   "from_json": true,

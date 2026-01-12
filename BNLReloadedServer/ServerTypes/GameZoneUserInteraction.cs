@@ -9,11 +9,25 @@ namespace BNLReloadedServer.ServerTypes;
 public partial class GameZone
 {
     private const ulong StaleRequestTimeout = 3000;
+    private bool IsPausedForPlayerAction() => _isPaused;
     
     public void ReceivedMoveRequest(uint unitId, ulong time, ZoneTransform transform)
     {
         if (!_units.TryGetValue(unitId, out var unit))
         {
+            return;
+        }
+
+        if (IsPausedForPlayerAction())
+        {
+            if (_pausedUnitTransforms.TryGetValue(unitId, out var pausedTransform))
+            {
+                _serviceZone.SendUnitMove(unitId, time, pausedTransform);
+            }
+            else
+            {
+                _serviceZone.SendUnitMoveFail(unitId, unit.LastMoveUpdateTime);
+            }
             return;
         }
 
@@ -28,6 +42,12 @@ public partial class GameZone
 
     public void ReceivedBuildRequest(ushort rpcId, uint playerId, BuildInfo buildInfo, IServiceZone builderService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            builderService.SendStartBuild(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
             !player.Devices.Values.Select(d => d.DeviceKey).Contains(buildInfo.DeviceKey))
@@ -78,6 +98,11 @@ public partial class GameZone
 
     public void ReceivedCancelBuildRequest(uint playerId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -99,6 +124,11 @@ public partial class GameZone
 
     public void ReceivedEventBroadcast(ZoneEvent zoneEvent)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (zoneEvent is ZoneEventUnitCommonLand commonLand && _units.TryGetValue(commonLand.UnitId, out var unit) && unit.Controlled)
         {
             if (!unit.IsFirstLand)
@@ -114,6 +144,12 @@ public partial class GameZone
 
     public void ReceivedSwitchGearRequest(ushort rpcId, uint playerId, Key gearKey, IServiceZone switcherService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            switcherService.SendSwitchGear(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -150,6 +186,12 @@ public partial class GameZone
 
     public void ReceivedStartReloadRequest(ushort rpcId, uint playerId, IServiceZone reloaderService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            reloaderService.SendStartReload(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -189,6 +231,12 @@ public partial class GameZone
     
     public void ReceivedReloadRequest(ushort rpcId, uint playerId, IServiceZone reloaderService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            reloaderService.SendReload(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -240,6 +288,11 @@ public partial class GameZone
 
     public void ReceivedReloadEndRequest(uint playerId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId))
         {
             return;
@@ -250,6 +303,11 @@ public partial class GameZone
     
     public void ReceivedReloadCancelRequest(uint playerId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -275,6 +333,11 @@ public partial class GameZone
 
     public void ReceivedProjCreateRequest(ulong shotId, ProjectileInfo projectileInfo, Guid? creatingSession)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         _keepShotAlive.Add(shotId);
         
         if (projectileInfo.ProjectileKey.GetCard<CardProjectile>() is
@@ -288,6 +351,11 @@ public partial class GameZone
 
     public void ReceivedProjMoveRequest(ulong shotId, ulong time, ZoneTransform zoneTransform)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (_checkForWater.Contains(shotId) && zoneTransform.Position.Y < _zoneData.PlanePosition)
         {
             ReceivedHit(time, new Dictionary<ulong, HitData>
@@ -313,6 +381,11 @@ public partial class GameZone
 
     public void ReceivedProjDropRequest(ulong shotId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         _keepShotAlive.Remove(shotId);
         _checkForWater.Remove(shotId);
         _shotInfo.Remove(shotId);
@@ -321,6 +394,12 @@ public partial class GameZone
 
     public void ReceivedCreateChannelRequest(ushort rpcId, uint playerId, ChannelData channelData, IServiceZone channelService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            channelService.SendStartChannel(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) || player.IsDead)
         {
@@ -367,6 +446,11 @@ public partial class GameZone
 
     public void ReceivedEndChannelRequest(uint playerId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -390,6 +474,11 @@ public partial class GameZone
 
     public void ReceivedToolChargeStartRequest(uint playerId, byte toolIndex)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -406,6 +495,12 @@ public partial class GameZone
 
     public void ReceivedToolChargeEndRequest(ushort rpcId, uint playerId, byte toolIndex, IServiceZone chargeService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            chargeService.SendToolEndChargeSuccess(rpcId, false, null);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -430,6 +525,11 @@ public partial class GameZone
 
     public void ReceivedDashChargeStartRequest(uint playerId, byte toolIndex)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -446,6 +546,12 @@ public partial class GameZone
 
     public void ReceivedDashChargeEndRequest(ushort rpcId, uint playerId, byte toolIndex, IServiceZone dashService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            dashService.SendDashEndChargeFail(rpcId, "paused");
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -469,6 +575,11 @@ public partial class GameZone
 
     public void ReceivedDashCastRequest(uint playerId, byte toolIndex)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) || player.IsDead)
         {
@@ -511,6 +622,11 @@ public partial class GameZone
 
     public void ReceivedDashHitRequest(uint playerId, byte toolIndex, HitData hitData)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -541,6 +657,11 @@ public partial class GameZone
 
     public void ReceivedGroundSlamCastRequest(uint playerId, byte toolIndex)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player)
             || player.IsDead)
@@ -576,6 +697,11 @@ public partial class GameZone
 
     public void ReceivedGroundSlamHitRequest(uint playerId, byte toolIndex, HitData hitData)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -601,6 +727,12 @@ public partial class GameZone
 
     public void ReceivedAbilityCastRequest(ushort rpcId, uint playerId, AbilityCastData castData, IServiceZone abilityService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            abilityService.SendCastAbility(rpcId, false);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) || player.AbilityCharges <= 0 ||
             player.AbilityCard is not { Behavior: not null } aCard
@@ -692,6 +824,11 @@ public partial class GameZone
 
     public void ReceivedUnitProjectileHit(uint unitId, HitData hitData)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(unitId, out var projectile) || projectile.ProjectileUnitData is not { } projectileData)
         {
             return;
@@ -729,6 +866,11 @@ public partial class GameZone
 
     public void ReceivedSkybeamHit(uint unitId, HitData hitData)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(unitId, out var skybeam) || skybeam.SkybeamUnitData is not { } skybeamData ||
             skybeamData.HitEffect is null)
         {
@@ -750,6 +892,11 @@ public partial class GameZone
 
     public void ReceivedCastRequest(uint playerId, CastData castData)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player)
             || player.IsDead)
@@ -846,6 +993,11 @@ public partial class GameZone
 
     public void ReceivedHit(ulong time, Dictionary<ulong, HitData> hits)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if ((ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds() > time + StaleRequestTimeout)
         {
             return;
@@ -1018,6 +1170,11 @@ public partial class GameZone
 
     public void ReceivedFall(uint unitId, float height, bool force)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(unitId, out var unit))
         {
             return;
@@ -1039,6 +1196,11 @@ public partial class GameZone
 
     public void ReceivedPickup(uint playerId, uint pickupId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
             !_units.TryGetValue(pickupId, out var pickup) ||
@@ -1055,6 +1217,11 @@ public partial class GameZone
 
     public void ReceivedSelectSpawnPoint(uint playerId, uint? spawnId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
                 !_playerUnits.TryGetValue(playerUnitId, out var player) ||
                 (spawnId is not null && !_zoneData.SpawnPoints.ContainsKey(spawnId.Value)))
@@ -1067,6 +1234,11 @@ public partial class GameZone
 
     public void ReceivedTurretTarget(uint playerId, uint turretId, uint targetId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(turretId, out var turret) || turret.TurretUnitData is null ||
             !_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
@@ -1081,6 +1253,11 @@ public partial class GameZone
 
     public void ReceivedTurretAttack(uint playerId, uint turretId, Vector3 shotPos, List<ShotData> shots)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(turretId, out var turret) || turret.TurretUnitData is null ||
             !_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
@@ -1105,6 +1282,11 @@ public partial class GameZone
 
     public void ReceivedMortarAttack(uint mortarId, Vector3 shotPos, List<ShotData> shots)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(mortarId, out var mortar) || mortar.MortarUnitData is null)
         {
             return;
@@ -1125,6 +1307,11 @@ public partial class GameZone
 
     public void ReceivedDrillAttack(uint drillId, Vector3 shotPos, List<ShotData> shots)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(drillId, out var drill) || drill.DrillUnitData is null)
         {
             return;
@@ -1145,6 +1332,11 @@ public partial class GameZone
 
     public void ReceivedUpdateTesla(uint teslaId, uint? targetId, List<uint> teslasInRange)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_units.TryGetValue(teslaId, out var tesla) || tesla.TeslaUnitData is null)
         {
             return;
@@ -1228,6 +1420,11 @@ public partial class GameZone
 
     public void ReceivedStartRecallRequest(uint playerId)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
             player is not { IsDead: false, IsActive: true, IsRecall: false })
@@ -1242,6 +1439,12 @@ public partial class GameZone
 
     public void ReceivedSurrenderRequest(ushort rpcId, uint playerId, IServiceZone surrenderService)
     {
+        if (IsPausedForPlayerAction())
+        {
+            surrenderService.SendSurrenderStart(rpcId, SurrenderStartResultType.Disabled);
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player))
         {
@@ -1297,6 +1500,11 @@ public partial class GameZone
 
     public void ReceivedSurrenderVoteRequest(uint playerId, bool accept)
     {
+        if (IsPausedForPlayerAction())
+        {
+            return;
+        }
+
         if (!_playerIdToUnitId.TryGetValue(playerId, out var playerUnitId) ||
             !_playerUnits.TryGetValue(playerUnitId, out var player) ||
             !_zoneData.IsSurrenderRequest[(int)player.Team])

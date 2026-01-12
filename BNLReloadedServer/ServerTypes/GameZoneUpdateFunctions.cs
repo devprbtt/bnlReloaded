@@ -201,6 +201,11 @@ public partial class GameZone
         ImpactData impactData, BlockShift? shift = null, Direction2D? sourceDirection = null, ResourceType? resourceType = null, 
         bool damageBlock = true)
     {
+        if (_isPaused)
+        {
+            return false;
+        }
+
         var unitSource = source switch
         {
             BlockSource blockSrc => MapBinary.OwnedBlocks.GetValueOrDefault(blockSrc.Position),

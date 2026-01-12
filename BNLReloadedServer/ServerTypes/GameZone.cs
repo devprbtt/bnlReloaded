@@ -64,6 +64,30 @@ public partial class GameZone : Updater
 
     private DateTimeOffset? _attackStartTime;
     private DateTimeOffset? _matchEndTime;
+
+    private bool _isPaused;
+    private DateTimeOffset? _pauseStartTime;
+    private DateTimeOffset? _build1EndTime;
+    private DateTimeOffset? _build2EndTime;
+    private DateTimeOffset? _respawnIncreaseEndTime;
+    private DateTimeOffset? _supplyEndTime;
+    private TimeSpan? _build1Remaining;
+    private TimeSpan? _build2Remaining;
+    private TimeSpan? _respawnIncreaseRemaining;
+    private TimeSpan? _supplyRemaining;
+    private readonly Dictionary<uint, PauseUnitState> _pausedUnits = new();
+    private readonly Dictionary<uint, ZoneTransform> _pausedUnitTransforms = new();
+    private Timer? _pauseCorrectionTimer;
+
+    private sealed class PauseUnitState
+    {
+        public required bool IsDead;
+        public required bool IsActive;
+        public float? Health;
+        public float? Forcefield;
+        public float? Shield;
+        public Dictionary<BuffType, float>? Buffs;
+    }
     
     private Task? _gameLoop;
     private Task? _tickChecker;
@@ -93,6 +117,7 @@ public partial class GameZone : Updater
     private uint NewSpawnId() => _newSpawnId++;
 
     public bool HasEnded => _zoneData.MatchEnded;
+    public bool IsPaused => _isPaused;
 
     public float GetMatchElapsedSeconds()
     {
@@ -103,6 +128,45 @@ public partial class GameZone : Updater
 
         var endTime = _matchEndTime ?? DateTimeOffset.Now;
         return (float)(endTime - _attackStartTime.Value).TotalSeconds;
+    }
+
+    public void SetPaused(bool paused)
+    {
+        if (_isPaused == paused)
+        {
+            return;
+        }
+
+        if (paused)
+        {
+            _isPaused = true;
+            _pauseStartTime = DateTimeOffset.Now;
+            ForcePausePlayers();
+            StartPauseCorrectionTimer();
+            PauseTimer(_build1Timer, _build1EndTime, ref _build1Remaining);
+            PauseTimer(_build2Timer, _build2EndTime, ref _build2Remaining);
+            PauseTimer(_respawnIncreaseTimer, _respawnIncreaseEndTime, ref _respawnIncreaseRemaining);
+            PauseTimer(_supplyTimer, _supplyEndTime, ref _supplyRemaining);
+            return;
+        }
+
+        if (_pauseStartTime == null)
+        {
+            _isPaused = false;
+            return;
+        }
+
+        var pauseDuration = DateTimeOffset.Now - _pauseStartTime.Value;
+        _pauseStartTime = null;
+        _isPaused = false;
+
+        ShiftTimeOffsets(pauseDuration);
+        RestorePausedPlayers();
+        StopPauseCorrectionTimer();
+        ResumeTimer(_build1Timer, ref _build1Remaining, ref _build1EndTime);
+        ResumeTimer(_build2Timer, ref _build2Remaining, ref _build2EndTime);
+        ResumeTimer(_respawnIncreaseTimer, ref _respawnIncreaseRemaining, ref _respawnIncreaseEndTime);
+        ResumeTimer(_supplyTimer, ref _supplyRemaining, ref _supplyEndTime);
     }
 
     public GameZone(IServiceZone serviceZone, IServiceZone unbufferedZone, IBuffer sendBuffer, ISender sessionsSender,
@@ -619,6 +683,8 @@ public partial class GameZone : Updater
                     _build1Timer.AutoReset = false;
                     _build1Timer.Elapsed += OnBuild1TimerElapsed;
                     _build1Timer.Start();
+                    _build1EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                    _build1Remaining = null;
                 }
                 break;
             }
@@ -640,6 +706,8 @@ public partial class GameZone : Updater
                     _respawnIncreaseTimer.Elapsed += OnRespawnTimerIncreased;
                     _respawnIncreaseTimer.AutoReset = false;
                     _respawnIncreaseTimer.Start();
+                    _respawnIncreaseEndTime = DateTimeOffset.Now.AddMilliseconds(_respawnIncreaseTimer.Interval);
+                    _respawnIncreaseRemaining = null;
                 }
                 else if (_zoneData.MatchCard.RespawnLogic?.IncrementRepeatSequence?.Count > 0)
                 {
@@ -649,6 +717,8 @@ public partial class GameZone : Updater
                     _respawnIncreaseTimer.Elapsed += OnRespawnTimerIncreased;
                     _respawnIncreaseTimer.AutoReset = false;
                     _respawnIncreaseTimer.Start();
+                    _respawnIncreaseEndTime = DateTimeOffset.Now.AddMilliseconds(_respawnIncreaseTimer.Interval);
+                    _respawnIncreaseRemaining = null;
                 }
 
                 if (_zoneData.MatchCard.SupplyLogic?.Sequence is { Count: > 0 } supplySequence)
@@ -658,6 +728,8 @@ public partial class GameZone : Updater
                     _supplyTimer.Elapsed += OnSupplyTimerElapsed;
                     _supplyTimer.AutoReset = false;
                     _supplyTimer.Start();
+                    _supplyEndTime = DateTimeOffset.Now.AddMilliseconds(_supplyTimer.Interval);
+                    _supplyRemaining = null;
                 }
                 else if (_zoneData.MatchCard.SupplyLogic?.RepeatSequence is { Count: > 0 } repSequence)
                 {
@@ -666,6 +738,8 @@ public partial class GameZone : Updater
                     _supplyTimer.Elapsed += OnSupplyTimerElapsed;
                     _supplyTimer.AutoReset = false;
                     _supplyTimer.Start();
+                    _supplyEndTime = DateTimeOffset.Now.AddMilliseconds(_supplyTimer.Interval);
+                    _supplyRemaining = null;
                 }
                 break;
             case ZonePhaseType.Assault:
@@ -691,6 +765,8 @@ public partial class GameZone : Updater
                     _build2Timer.AutoReset = false;
                     _build2Timer.Elapsed += OnBuild2TimerElapsed;
                     _build2Timer.Start();
+                    _build2EndTime = DateTimeOffset.FromUnixTimeMilliseconds(endTime.Value);
+                    _build2Remaining = null;
                 }
                 break;
             case ZonePhaseType.Build2:
@@ -1180,8 +1256,14 @@ public partial class GameZone : Updater
         _unbufferedZone.SendBlockUpdates(updates);
     }
 
-    private static void MovementActive(Unit unit)
+    private void MovementActive(Unit unit)
     {
+        if (_isPaused)
+        {
+            unit.UpdateData(new UnitUpdate { MovementActive = false });
+            return;
+        }
+
         unit.LastMoveTime = DateTimeOffset.Now;
         unit.WasAfkWarned = false;
         unit.UpdateData(new UnitUpdate { MovementActive = true });
@@ -1626,6 +1708,11 @@ public partial class GameZone : Updater
             });
             while (await tickTimer.WaitForNextTickAsync(token))
             {
+                if (_isPaused)
+                {
+                    continue;
+                }
+
                 EnqueueAction(OnTick(_tickNumber++));
             }
         }
@@ -1654,6 +1741,11 @@ public partial class GameZone : Updater
     private Action OnTick(ulong tickNumber) =>
         () =>
         {
+            if (_isPaused)
+            {
+                return;
+            }
+
             var doBuffCheck = tickNumber % TicksForBuffCheck == 0;
             var doDmgCaptureCheck = tickNumber % TicksForDmgCaptureCheck == 0;
             var doBlockCheck = tickNumber == 0;
@@ -2088,12 +2180,244 @@ public partial class GameZone : Updater
 
     private void FlushBuffer() => _sendBuffer.UseBuffer(_sessionsSender.Send);
 
+    private void ForcePausePlayers()
+    {
+        foreach (var unit in _playerUnits.Values.Where(u => u.PlayerId is not null))
+        {
+            if (!_pausedUnits.ContainsKey(unit.Id))
+            {
+                var updateData = unit.GetUpdateData();
+                _pausedUnits[unit.Id] = new PauseUnitState
+                {
+                    IsDead = unit.IsDead,
+                    IsActive = unit.IsActive,
+                    Health = updateData.Health,
+                    Forcefield = updateData.Forcefield,
+                    Shield = updateData.Shield,
+                    Buffs = updateData.Buffs != null ? new Dictionary<BuffType, float>(updateData.Buffs) : null
+                };
+            }
+
+            if (!_pausedUnitTransforms.ContainsKey(unit.Id))
+            {
+                _pausedUnitTransforms[unit.Id] = ClonePausedTransform(unit.Transform);
+            }
+
+            unit.IsDead = true;
+            unit.UpdateData(new UnitUpdate
+            {
+                Health = 0.0f,
+                Forcefield = 0.0f,
+                Shield = 0.0f,
+                MovementActive = false,
+                Buffs = new Dictionary<BuffType, float>
+                {
+                    { BuffType.Root, 1.0f },
+                    { BuffType.Disarm, 1.0f },
+                    { BuffType.Disabled, 1.0f }
+                }
+            });
+        }
+    }
+
+    private void RestorePausedPlayers()
+    {
+        foreach (var (unitId, state) in _pausedUnits.ToList())
+        {
+            if (!_playerUnits.TryGetValue(unitId, out var unit))
+            {
+                _pausedUnits.Remove(unitId);
+                continue;
+            }
+
+            unit.IsDead = state.IsDead;
+            unit.IsActive = state.IsActive;
+
+            var health = state.Health;
+            var forcefield = state.Forcefield;
+            var shield = state.Shield;
+            if (unit.IsDead)
+            {
+                health ??= 0.0f;
+                forcefield ??= 0.0f;
+                shield ??= 0.0f;
+            }
+
+            unit.UpdateData(new UnitUpdate
+            {
+                Health = health,
+                Forcefield = forcefield,
+                Shield = shield,
+                MovementActive = !unit.IsDead,
+                Buffs = state.Buffs
+            });
+
+            _pausedUnits.Remove(unitId);
+        }
+
+        _pausedUnitTransforms.Clear();
+    }
+
+    private static ZoneTransform ClonePausedTransform(ZoneTransform transform)
+    {
+        return new ZoneTransform
+        {
+            Position = transform.Position,
+            Rotation = transform.Rotation,
+            LocalVelocity = Vector3s.Zero,
+            IsCrouch = transform.IsCrouch,
+            IsJump = false,
+            IsSprint = false,
+            IsWallClimb = false,
+            IsDash = false,
+            IsGroundSlam = false,
+            NoInterpolation = true
+        };
+    }
+
+    private void StartPauseCorrectionTimer()
+    {
+        if (_pauseCorrectionTimer != null) return;
+
+        _pauseCorrectionTimer = new Timer(TimeSpan.FromMilliseconds(200));
+        _pauseCorrectionTimer.AutoReset = true;
+        _pauseCorrectionTimer.Elapsed += OnPauseCorrectionElapsed;
+        _pauseCorrectionTimer.Start();
+    }
+
+    private void StopPauseCorrectionTimer()
+    {
+        if (_pauseCorrectionTimer == null) return;
+        _pauseCorrectionTimer.Stop();
+        _pauseCorrectionTimer.Dispose();
+        _pauseCorrectionTimer = null;
+    }
+
+    private void OnPauseCorrectionElapsed(object? sender, ElapsedEventArgs e)
+    {
+        if (!_isPaused)
+        {
+            return;
+        }
+
+        EnqueueAction(SendPauseCorrections);
+    }
+
+    private void SendPauseCorrections()
+    {
+        if (!_isPaused)
+        {
+            return;
+        }
+
+        var now = (ulong)DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        foreach (var (unitId, transform) in _pausedUnitTransforms)
+        {
+            _serviceZone.SendUnitMove(unitId, now, transform);
+        }
+    }
+
+    private static void PauseTimer(Timer? timer, DateTimeOffset? endTime, ref TimeSpan? remaining)
+    {
+        if (timer == null || endTime == null)
+        {
+            return;
+        }
+
+        var timeLeft = endTime.Value - DateTimeOffset.Now;
+        remaining = timeLeft > TimeSpan.Zero ? timeLeft : TimeSpan.FromMilliseconds(1);
+        timer.Stop();
+    }
+
+    private static void ResumeTimer(Timer? timer, ref TimeSpan? remaining, ref DateTimeOffset? endTime)
+    {
+        if (timer == null || remaining == null)
+        {
+            return;
+        }
+
+        timer.Interval = Math.Max(1, remaining.Value.TotalMilliseconds);
+        endTime = DateTimeOffset.Now.AddMilliseconds(timer.Interval);
+        remaining = null;
+        timer.Start();
+    }
+
+    private void ShiftTimeOffsets(TimeSpan pauseDuration)
+    {
+        if (pauseDuration <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        if (_attackStartTime.HasValue)
+        {
+            _attackStartTime = _attackStartTime.Value.Add(pauseDuration);
+        }
+
+        if (_matchEndTime.HasValue)
+        {
+            _matchEndTime = _matchEndTime.Value.Add(pauseDuration);
+        }
+
+        _zoneData.Phase.StartTime += (long)pauseDuration.TotalMilliseconds;
+        if (_zoneData.Phase.EndTime.HasValue)
+        {
+            _zoneData.Phase.EndTime += (long)pauseDuration.TotalMilliseconds;
+        }
+        _zoneData.UpdateData(new ZoneUpdate { Phase = _zoneData.Phase });
+
+        for (var i = 0; i < _zoneData.SurrenderEndTime.Length; i++)
+        {
+            if (_zoneData.SurrenderEndTime[i].HasValue)
+            {
+                _zoneData.SurrenderEndTime[i] = _zoneData.SurrenderEndTime[i]!.Value.Add(pauseDuration);
+            }
+
+            if (_lastSurrenderTime[i].HasValue)
+            {
+                _lastSurrenderTime[i] = _lastSurrenderTime[i]!.Value.Add(pauseDuration);
+            }
+        }
+
+        foreach (var unit in _units.Values)
+        {
+            unit.StartChargeTime = unit.StartChargeTime?.Add(pauseDuration);
+            unit.TimeTillNextAbilityCharge = unit.TimeTillNextAbilityCharge?.Add(pauseDuration);
+            unit.AbilityTriggerTimeEnd = unit.AbilityTriggerTimeEnd?.Add(pauseDuration);
+            unit.RespawnTime = unit.RespawnTime?.Add(pauseDuration);
+            unit.RecallTime = unit.RecallTime?.Add(pauseDuration);
+            unit.SpawnProtectionTime = unit.SpawnProtectionTime?.Add(pauseDuration);
+            unit.LastMoveTime = unit.LastMoveTime?.Add(pauseDuration);
+            unit.LastTeleport = unit.LastTeleport?.Add(pauseDuration);
+
+            if (unit.PlayerId is not null && unit.RespawnTime.HasValue)
+            {
+                _zoneData.UpdateSpawnTime(unit.PlayerId.Value,
+                    (ulong)unit.RespawnTime.Value.ToUnixTimeMilliseconds());
+            }
+        }
+
+        foreach (var updater in MapBinary.UnitsInsideBlock.Values)
+        {
+            updater.ShiftIntervals(pauseDuration);
+        }
+
+        if (_zoneData.SupplyInfo is { NextSupplyDropTime: not null } supplyInfo)
+        {
+            supplyInfo.NextSupplyDropTime =
+                (ulong)(supplyInfo.NextSupplyDropTime.Value + pauseDuration.TotalMilliseconds);
+            _zoneData.UpdateData(new ZoneUpdate { SupplyInfo = supplyInfo });
+        }
+    }
+
     private void OnBuild1TimerElapsed(object? sender, ElapsedEventArgs e)
     {
         if (_build1Timer == null) return;
         _build1Timer.Stop();
         _build1Timer.Dispose();
         _build1Timer = null;
+        _build1EndTime = null;
+        _build1Remaining = null;
 
         try
         {
@@ -2111,6 +2435,8 @@ public partial class GameZone : Updater
         _build2Timer.Stop();
         _build2Timer.Dispose();
         _build2Timer = null;
+        _build2EndTime = null;
+        _build2Remaining = null;
         
         try
         {
@@ -2135,6 +2461,8 @@ public partial class GameZone : Updater
             if (EnqueueAction(() =>
                 {
                     IncreaseSpawnTime(_respawnIncreaseTimer);
+                    _respawnIncreaseEndTime = DateTimeOffset.Now.AddMilliseconds(_respawnIncreaseTimer.Interval);
+                    _respawnIncreaseRemaining = null;
                     _respawnIncreaseTimer.Start();
                 }))
             {
@@ -2143,6 +2471,8 @@ public partial class GameZone : Updater
                 
             _respawnIncreaseTimer.Dispose();
             _respawnIncreaseTimer = null;
+            _respawnIncreaseEndTime = null;
+            _respawnIncreaseRemaining = null;
         }
         catch (ObjectDisposedException)
         {
@@ -2150,6 +2480,8 @@ public partial class GameZone : Updater
             {
                 _respawnIncreaseTimer.Dispose();
                 _respawnIncreaseTimer = null;
+                _respawnIncreaseEndTime = null;
+                _respawnIncreaseRemaining = null;
             }
         }
     }
@@ -2175,6 +2507,8 @@ public partial class GameZone : Updater
                 {
                     _zoneData.UpdateSupplyTime(sequence[_supplyTimes], GetSupplyPosition(sequence[_supplyTimes]));
                     _supplyTimer.Interval = TimeSpan.FromSeconds(sequence[_supplyTimes].Seconds).TotalMilliseconds;
+                    _supplyEndTime = DateTimeOffset.Now.AddMilliseconds(_supplyTimer.Interval);
+                    _supplyRemaining = null;
                     _supplyTimer.Start();
                 }
                 else if (_zoneData.MatchCard.SupplyLogic.RepeatSequence is { Count: > 0 } repeatSequence)
@@ -2182,6 +2516,8 @@ public partial class GameZone : Updater
                     var repIndex = (_supplyTimes - (_zoneData.MatchCard.SupplyLogic.Sequence?.Count ?? 0)) % repeatSequence.Count;
                     _zoneData.UpdateSupplyTime(repeatSequence[repIndex], GetSupplyPosition(repeatSequence[repIndex]));
                     _supplyTimer.Interval = TimeSpan.FromSeconds(repeatSequence[repIndex].Seconds).TotalMilliseconds;
+                    _supplyEndTime = DateTimeOffset.Now.AddMilliseconds(_supplyTimer.Interval);
+                    _supplyRemaining = null;
                     _supplyTimer.Start();
                 }
             }
@@ -2189,6 +2525,8 @@ public partial class GameZone : Updater
             {
                 _supplyTimer.Dispose();
                 _supplyTimer = null;
+                _supplyEndTime = null;
+                _supplyRemaining = null;
             }
         }
         catch (ObjectDisposedException)
@@ -2197,6 +2535,8 @@ public partial class GameZone : Updater
             {
                 _supplyTimer.Dispose();
                 _supplyTimer = null;
+                _supplyEndTime = null;
+                _supplyRemaining = null;
             }
         }
     }

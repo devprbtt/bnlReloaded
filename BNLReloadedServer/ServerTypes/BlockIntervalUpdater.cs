@@ -50,4 +50,20 @@ public class BlockIntervalUpdater(BlockSpecialInsideEffect effect, BlockSource s
         
         return result;
     }
+
+    public void ShiftIntervals(TimeSpan pauseDuration)
+    {
+        if (pauseDuration <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        foreach (var unit in _intervals.Keys.ToList())
+        {
+            if (_intervals[unit].HasValue)
+            {
+                _intervals[unit] = _intervals[unit]!.Value.Add(pauseDuration);
+            }
+        }
+    }
 }

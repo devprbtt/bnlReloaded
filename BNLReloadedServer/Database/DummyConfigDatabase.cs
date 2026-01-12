@@ -29,6 +29,8 @@ public class DummyConfigDatabase : IConfigDatabase
     public IPAddress RegionPublicIp() => IPAddress.Parse(RegionPublicHost());
 
     public int StatusHttpPort() => 8080;
+    public string? StatusHttpUsername() => null;
+    public string? StatusHttpPassword() => null;
 
     public RegionGuiInfo GetRegionInfo() => new()
     {

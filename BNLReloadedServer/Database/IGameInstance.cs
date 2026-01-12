@@ -87,4 +87,6 @@ public interface IGameInstance
     public void SurrenderVote(uint playerId, bool accept);
     public void EditorCommand(uint playerId, MapEditorCommand command, bool force);
     public GameInstanceSnapshot GetStatusSnapshot();
+    public bool IsMatchPaused();
+    public bool SetMatchPaused(bool paused);
 }

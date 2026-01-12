@@ -59,6 +59,7 @@ public record OnlineSnapshot
 
 public record LobbySnapshot
 {
+    public string InstanceId { get; init; } = string.Empty;
     public string LobbyId { get; init; } = string.Empty;
     public string? Name { get; init; }
     public string? LobbyName { get; init; }

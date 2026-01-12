@@ -45,6 +45,8 @@ public class ConfigDatabase : IConfigDatabase
     public IPAddress RegionPublicIp() => _regionPublicIp;
 
     public int StatusHttpPort() => _configs.StatusHttpPort ?? 8080;
+    public string? StatusHttpUsername() => _configs.StatusHttpUsername;
+    public string? StatusHttpPassword() => _configs.StatusHttpPassword;
 
     public RegionGuiInfo GetRegionInfo() => new()
     {

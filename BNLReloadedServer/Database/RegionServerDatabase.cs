@@ -771,6 +771,17 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
         return instance;
     }
 
+    public IGameInstance? GetGameInstanceById(string gameInstanceId)
+    {
+        if (string.IsNullOrWhiteSpace(gameInstanceId))
+        {
+            return null;
+        }
+
+        _gameInstances.TryGetValue(gameInstanceId, out var instance);
+        return instance;
+    }
+
     public bool RemoveGameInstance(string gameInstanceId)
     {
         foreach (var playerId in _connectedUsers.Keys)
@@ -1132,6 +1143,7 @@ public class RegionServerDatabase(AsyncTaskTcpServer server, AsyncTaskTcpServer 
 
                 customLobbies.Add(new LobbySnapshot
                 {
+                    InstanceId = custom.GameInstanceId ?? string.Empty,
                     LobbyId = customId.ToString(),
                     Name = custom.GameInfo.GameName,
                     LobbyName = custom.GameInfo.GameName,
