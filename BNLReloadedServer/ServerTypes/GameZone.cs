@@ -1037,6 +1037,9 @@ public partial class GameZone : Updater
             {
                 MovementActive(playerUnit);
             }
+
+            ApplyBuildPhaseDamageEffect(playerUnit,
+                _zoneData.Phase.PhaseType is ZonePhaseType.Build or ZonePhaseType.Build2);
         }
     }
 
