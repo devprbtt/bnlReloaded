@@ -510,6 +510,29 @@ public partial class Unit
         });
     }
 
+    public void RemoveEffectsForced(IEnumerable<ConstEffectInfo> effects)
+    {
+        var removedEffects = effects.Where(e => ActiveEffects.Contains(e)).ToList();
+        if (removedEffects.Count == 0 || IsDead)
+        {
+            return;
+        }
+
+        foreach (var effect in removedEffects)
+        {
+            _effectSources.Remove(effect.Key);
+        }
+
+        ActiveEffects = ActiveEffects.RemoveRange(removedEffects);
+        _buffs = ExtractBuffs(ActiveEffects.Select(info => info.Key).Distinct());
+
+        _updater.OnUnitUpdate(this, new UnitUpdate
+        {
+            Buffs = _buffs,
+            Effects = ActiveEffects.ToInfoDictionary()
+        });
+    }
+
     public void RemoveTriggerEffects()
     {
         var removedEffects = ActiveEffects.Where(e =>

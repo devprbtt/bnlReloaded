@@ -47,6 +47,11 @@ public partial class GameZone : Updater
         _teamEffects = new HashSet<ConstEffectInfo>[Enum.GetValues<TeamType>().Length];
     private bool _buildPhaseDamageBuffActive;
     private static readonly Key BuildPhaseDamageEffectKey = new("effect_build_phase_damage_boost");
+    private const float FrostboundAuraRange = 10f;
+    private static readonly Key AbeHeroKey = new("unit_hero_abe");
+    private static readonly Key FrostboundAuraPerkKey = new("perk_hero_abe_frostbound_aura_3");
+    private static readonly Key FrostboundAuraSlowEffectKey = new("effect_status_slow");
+    private readonly Dictionary<uint, DateTimeOffset> _frostboundAuraCooldowns = new();
     
     private readonly Dictionary<uint, MapSpawnPoint> _mapSpawnPoints = new();
     private readonly Dictionary<uint, Unit> _playerSpawnPoints = new();

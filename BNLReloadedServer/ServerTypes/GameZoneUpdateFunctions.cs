@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Numerics;
 using BNLReloadedServer.BaseTypes;
 using BNLReloadedServer.Database;
 using BNLReloadedServer.Octree_Extensions;
@@ -1773,11 +1774,49 @@ public partial class GameZone
         
         target.DamageStatsUpdate(targetTeam, damage, impact.Crit, impact.SourceKey == CatalogueHelper.FallImpact, attacker, attackerPlayer);
 
+        ApplyFrostboundAuraOnHit(target, attackerPlayer ?? attacker, impact);
+
         if (target.UnitCard?.IsBase is true && target.HealthPercentage <= _zoneData.GameModeCard.Backfilling?.ObjectivesHealthThreshold)
         {
             _gameInitiator.SetBackfillReady(false);
         }
     }
+
+    private void ApplyFrostboundAuraOnHit(Unit target, Unit? attacker, ImpactData impact)
+    {
+        if (target.PlayerId is null ||
+            target.Key != AbeHeroKey ||
+            !PlayerHasPerk(target.PlayerId.Value, FrostboundAuraPerkKey) ||
+            attacker?.PlayerId is null ||
+            attacker.Team == target.Team)
+        {
+            return;
+        }
+
+        var targetPos = target.GetMidpoint();
+        var attackerPos = attacker.GetMidpoint();
+        if (Vector3.DistanceSquared(targetPos, attackerPos) > FrostboundAuraRange * FrostboundAuraRange)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+        if (_frostboundAuraCooldowns.TryGetValue(target.PlayerId.Value, out var readyAt) && readyAt > now)
+        {
+            return;
+        }
+
+        _frostboundAuraCooldowns[target.PlayerId.Value] = now.AddSeconds(10);
+
+        attacker.AddEffects(
+            [new ConstEffectInfo(FrostboundAuraSlowEffectKey)],
+            target.Team,
+            target.GetSelfSource(impact));
+    }
+
+    private bool PlayerHasPerk(uint playerId, Key perkKey) =>
+        _playerLobbyInfo.FirstOrDefault(player => player.PlayerId == playerId)?.Perks?.Contains(perkKey) == true;
+
 
     private void UnitIsKilled(Unit target, ImpactData impact, bool mining = false)
     {
